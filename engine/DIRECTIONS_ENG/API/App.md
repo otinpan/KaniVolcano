@@ -98,3 +98,13 @@ app.set_current_scene("TutorialScene")?;
 ```
 
 `set_current_scene()` uses the name returned by the scene's `name()` method.
+
+## Setting the Fixed Update Interval
+
+Set the fixed update interval in seconds. The default is 1/60 second.
+
+```rust
+app.set_fixed_delta_time(1.0 / 60.0)?;
+```
+
+Returns an error if the interval is zero, negative, or non-finite.

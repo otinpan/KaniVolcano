@@ -33,6 +33,11 @@ impl Time {
     pub fn elapsed_seconds(&self) -> f32 {
         self.elapsed_seconds
     }
+
+    pub(crate) fn advance_fixed(&mut self, delta_seconds: f32){
+        self.delta_seconds=delta_seconds;
+        self.elapsed_seconds+=delta_seconds;
+    }
 }
 
 impl Default for Time {

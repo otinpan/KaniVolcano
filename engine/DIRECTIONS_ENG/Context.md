@@ -101,6 +101,15 @@ Registers an update system that runs every frame.
 context.add_update_system("camera", CameraSystem);
 ```
 
+### `add_fixed_update_system()`
+
+Register an update system that runs at a fixed time step (default: 1/60 second).
+
+```rust
+context.add_fixed_update_system("physics", PhysicsSystem);
+```
+
+
 `SceneContext::spawn()` automatically adds `SceneOwned` to the created entity.
 
 ## `UpdateContext`

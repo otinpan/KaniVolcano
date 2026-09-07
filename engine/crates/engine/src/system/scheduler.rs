@@ -18,6 +18,7 @@ pub struct Scheduler {
     pub render_system: RenderSystem,
     pub render_commands: RenderCommandQueue,
     update_systems: Vec<ScheduledUpdateSystem>,
+    fixed_update_systems: Vec<ScheduledUpdateSystem>,
 }
 
 impl Scheduler {
@@ -34,6 +35,7 @@ impl Scheduler {
         render_system: RenderSystem,
         render_commands: RenderCommandQueue,
         update_systems: Vec<ScheduledUpdateSystem>,
+        fixed_update_systems: Vec<ScheduledUpdateSystem>,
     ) -> Self {
         Self {
             command_system,
@@ -41,6 +43,7 @@ impl Scheduler {
             render_system,
             render_commands,
             update_systems,
+            fixed_update_systems,
         }
     }
 
@@ -57,6 +60,21 @@ impl Scheduler {
             system: Box::new(system),
             enabled: true,
         });
+    }
+
+    pub fn add_fixed_update_system<S>(&mut self, name: &str, system: S)
+    where 
+        S: UpdateSystem + 'static,
+    {
+        if self.fixed_update_systems.iter().any(|s| s.name==name){
+            return;
+        }
+
+        self.fixed_update_systems.push(ScheduledUpdateSystem{
+            name: name.to_string(),
+            system: Box::new(system),
+            enabled: true,
+        })
     }
 
     pub fn remove_update_system(&mut self, name: &str) -> bool {
@@ -128,6 +146,31 @@ impl Scheduler {
         Ok(())
     }
 
+    pub fn run_fixed_update_stage(
+        &mut self,
+        world: &mut World,
+        input: &Input,
+        time: &Time,
+        resources: &mut Resources,
+        scene_commands: &mut SceneCommandQueue,
+    ) -> Result<()>{
+        let mut context = UpdateContext::new(
+            world,
+            input,
+            time,
+            resources,
+            &mut self.render_commands,
+            scene_commands,
+        );
+
+        for scheduled_system in &mut self.fixed_update_systems {
+            if scheduled_system.enabled {
+                scheduled_system.system.update(&mut context)?
+            }
+        }
+        Ok(())
+    }
+
     pub fn run_render_stage(
         &mut self,
         world: &mut World,
@@ -148,6 +191,7 @@ impl Default for Scheduler {
             render_system: RenderSystem,
             render_commands: RenderCommandQueue::default(),
             update_systems: Vec::new(),
+            fixed_update_systems: Vec::new(),
         }
     }
 }

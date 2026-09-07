@@ -111,6 +111,12 @@ impl<'a> SceneContext<'a> {
     {
         self.scheduler.add_update_system(name, system);
     }
+    pub fn add_fixed_update_system<S>(&mut self, name: &str, system: S)
+    where 
+        S: UpdateSystem + 'static,
+    {
+        self.scheduler.add_fixed_update_system(name,system);
+    }
 
     // create new primitive entity and new mesh
     // entity is create here, but mesh is created in RenderSystem using VulkanRenderer.

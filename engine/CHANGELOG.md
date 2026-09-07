@@ -24,3 +24,16 @@ impl Command for ChangeSceneCommand {
     }
 }
 ```
+
+### Cuboid
+Create `spawn_cuboid_3d()` in `ObjectApi`.
+
+### `mesh_asset_id`
+Create `mesh_asset_id()` in `EntityApi`. 
+
+### Fixed Update System
+Enable users register systems that are updated per fixed time step.
+
+```rust
+scene_context.add_fixed_update_system(name, system)
+```

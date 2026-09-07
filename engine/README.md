@@ -108,9 +108,9 @@
   - ~~sceneごとの初期化/update~~
 
 * ~~ドキュメント~~
-* Scene更新API
-	- 今は、Scene更新するたびにAppで`set_current_scene()`
-	- Sceneからできるようにする
+* ~~Scene更新API~~
+	- ~~今は、Scene更新するたびにAppで`set_current_scene()`~~
+	- ~~Sceneからできるようにする~~
 
 * ストップ機能
 

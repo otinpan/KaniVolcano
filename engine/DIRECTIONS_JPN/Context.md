@@ -140,7 +140,15 @@ context.bind_input_command(
 ```rust
 context.add_update_system("camera",CameraSystem);
 ```
-名前とユーザー定義のシステムを登録することで、毎フレーム呼ばれるSystemを作成することが出来ます。
+名前とユーザー定義のシステムを登録することで、毎フレーム呼ばれるSystemを作成することが出来ます。可変フレームで更新します。
+
+### `add_fixed_update_system()`
+```rust
+context.add_fixed_update_system("physics", PhysicsSystem);
+```
+
+固定フレームで更新するようなシステムを追加します。ここで登録されたシステムは、デフォルトでは1/60秒ごとに更新されます。
+
 
 ### EntityAPI
 EntityAPIを使うことが出来ます。ただ、EntityAPIで使える`spaw()`は`SceneContext`で呼ぶ場合は、自動的に`SceneOwned`が付与されます。

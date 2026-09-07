@@ -132,3 +132,13 @@ app.set_current_scene("TutorialScene")?;
 
 現段階では、SceneはAppからしか切り替えることが出来ません。今後は、`CommandContext`や`UpdateContext`からも切り替えられるように更新する予定です。
 
+## 固定更新間隔の設定
+
+固定更新の間隔を秒単位で指定します。デフォルトは1/60秒です。
+
+```rust
+app.set_fixed_delta_time(1.0 / 60.0)?;
+```
+
+ゼロ・負数・非有限値を指定するとエラーになります。
+

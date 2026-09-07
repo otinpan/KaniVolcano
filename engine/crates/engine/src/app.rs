@@ -35,6 +35,11 @@ pub struct App {
     scheduler: Scheduler,
     scene_manager: SceneManager,
     scene_commands: SceneCommandQueue,
+
+    // timer
+    fixed_accumulator: f64,
+    fixed_time: Time,
+    fixed_delta: f64,
 }
 
 impl App {
@@ -64,6 +69,9 @@ impl App {
             scheduler,
             scene_manager,
             scene_commands,
+            fixed_accumulator: 0.0,
+            fixed_time: Time::default(),
+            fixed_delta: 1.0 / 60.0,
         };
 
         app.scheduler
@@ -93,6 +101,23 @@ impl App {
             &mut self.resources,
             &mut self.scene_commands,
         )?;
+
+        // Limit catch-up after a long pause to 0.25 seconds.
+        self.fixed_accumulator += f64::from(delta_time).min(0.25);
+
+        while self.fixed_accumulator >= self.fixed_delta {
+            self.fixed_time.advance_fixed(self.fixed_delta as f32);
+
+            self.scheduler.run_fixed_update_stage(
+                &mut self.world,
+                &self.input,
+                &self.fixed_time,
+                &mut self.resources,
+                &mut self.scene_commands,
+            )?;
+
+            self.fixed_accumulator -= self.fixed_delta;
+        }
 
         {
             let mut context = UpdateContext::new(
@@ -221,6 +246,17 @@ impl App {
         Ok(self.resources.register_skybox_texture(name, handle))
     }
 
+    /// Sets the fixed update interval in seconds.
+    /// Returns an error for non-finite or non-positive intervals.
+    pub fn set_fixed_delta_time(&mut self, fixed_delta_time: f32) -> Result<()> {
+        anyhow::ensure!(
+            fixed_delta_time.is_finite() && fixed_delta_time > 0.0,
+            "fixed delta time must be finite and positive"
+        );
+        self.fixed_delta = f64::from(fixed_delta_time);
+        Ok(())
+    }
+
     fn apply_scene_commands(&mut self) -> Result<()> {
         let commands = self.scene_commands.drain().collect::<Vec<_>>();
 
@@ -233,6 +269,7 @@ impl App {
         }
         Ok(())
     }
+
 }
 
 unsafe fn create_skybox_mesh(renderer: &mut VulkanRenderer, size: f32) -> Result<MeshHandle> {
