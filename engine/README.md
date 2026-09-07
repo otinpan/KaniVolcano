@@ -112,7 +112,26 @@
 	- ~~今は、Scene更新するたびにAppで`set_current_scene()`~~
 	- ~~Sceneからできるようにする~~
 
-* ストップ機能
+* ~~固定フレーム~~
+
+* フォント/UI
+cosmic-text + etagere
+フォントの読み込み
+1. ユーザー指定のTTF/OTFファイルを読み込み・解析
+2. Resourcesに登録し、FontAssetIdを返す
+
+テキストの描画準備
+3. 文字列・フォント・サイズから、グリフと配置を決定
+4. 必要なグリフをラスタライズして画像化
+5. グリフ画像をアトラスに詰め込み、キャッシュ
+6. 配置とUVから描画用の頂点・インデックスを生成
+
+GPU描画
+7. アトラス画像と描画データをrenderer_vulkanへ転送
+8. テクスチャを貼った四角形として文字を描画
+- `app.load_font(name,path)`
+- `assets.font_asset_id(name)`
+
 
 * 当たり判定
   - BoxCollider
@@ -128,10 +147,6 @@
   - KinematicBody
   - move_and_slide / move_and_collide
 
-* フォント/UI
-  - draw_text
-  - debug text
-  - simple HUD
 
 * ShaderApi
 	- shader作成

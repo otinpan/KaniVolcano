@@ -14,6 +14,7 @@ mod pending_primitive_mesh;
 mod rotator;
 mod scene_owned;
 mod tags;
+mod text;
 mod visibility;
 
 pub use camera::Camera;
@@ -26,6 +27,7 @@ pub use pending_primitive_mesh::PendingPrimitiveMesh;
 pub use rotator::Rotator;
 pub use scene_owned::{SceneId, SceneOwned};
 pub use tags::Tags;
+pub use text::Text;
 pub use visibility::Visibility;
 
 // Component does not have short reference like &'a str, &String

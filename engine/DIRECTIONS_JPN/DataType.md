@@ -12,6 +12,14 @@ pub struct MeshAsset {
 `MeshAsset`は内部にVulkan側で使用するメッシュの識別子である、`MeshHandle`を持ちます。また、このメッシュをもつEntityをカウントする`ref_count`を持ちます。
 `ref_count`が0かつ`auto_release`がtrueなら、自動的にこのメッシュはリリースされます。
 
+### `FontAssetId`
+`FontAssetId`は`FontAsset`の識別子です。
+```rust
+pub struct FontAsset{
+    data: Vec<u8>,
+}
+```
+
 ### `PipelineKey`
 `PipelineKey`は、どの描画パイプラインを使うかを指定するためのEnumです。
 描画パイプラインはshaderと対応しており、頂点データの形式や描画方法を決めます。

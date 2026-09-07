@@ -16,6 +16,14 @@ pub struct MeshAsset {
 
 A `MeshAsset` owns a `MeshHandle` used by the Vulkan renderer. `ref_count` tracks how many entities are using the mesh. If `auto_release` is `true`, the mesh is released when the reference count reaches zero.
 
+### `FontAssetId`
+`FontAssetId` identifies a `FontAsset`.
+```rust
+pub struct FontAsset{
+    data: Vec<u8>,
+}
+```
+
 ### `PipelineKey`
 
 `PipelineKey` selects which rendering pipeline to use. A pipeline decides the shader, vertex layout, and drawing method.

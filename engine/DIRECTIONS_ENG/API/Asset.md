@@ -75,3 +75,13 @@ for (asset_id, mesh) in context.mesh_assets() {
     log::debug!("Mesh {asset_id:?}: {mesh:?}");
 }
 ```
+
+## Fontの取得
+```rust
+let font_assets: Iterator<Item = (FontAssetId, &FontAsset)> = context.font_assets();
+```
+Using `font_assets()`, you can retrieve all registered fonts.
+```rust
+let font_asset_id: Result<FontAssetId>= context.font_asset_id("font");
+```
+Using `font_asset_id(name)`, you can retrieve the FontAssetId of the font registered with the specified name. If no font with that name exists, an error is returned.

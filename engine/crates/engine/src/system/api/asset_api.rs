@@ -1,5 +1,8 @@
 use crate::app::{DEFAULT_SKYBOX_TEXTURE, DEFAULT_TEXTURE};
-use crate::{MeshAsset, MeshAssetId, PrimitiveType, RenderCommandApi, Resources};
+use crate::{
+    MeshAsset, MeshAssetId, PrimitiveType, RenderCommandApi, Resources,
+    FontAsset, FontAssetId,
+};
 use anyhow::{Result, anyhow};
 use renderer_vulkan::{SkyboxTextureHandle, TextureHandle, VertexLayout};
 
@@ -71,4 +74,14 @@ pub trait AssetApi {
         self.resources().mesh_assets()
     }
 
+    // font_asset
+    fn font_assets(&self) -> impl Iterator<Item = (FontAssetId, &FontAsset)>{
+        self.resources().font_assets()
+    }
+
+    fn font_asset_id(&self, name: &str) -> Result<FontAssetId> {
+        self.resources()
+            .font_asset_id(name)
+            .ok_or_else(|| anyhow!("font not found: {name}"))
+    }
 }

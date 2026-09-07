@@ -5,6 +5,7 @@ use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
 };
 use std::collections::HashMap;
+use kani_volcano_text::{LoadedFont, TextSystem};
 
 pub type Vec3 = Vector3<f32>;
 
@@ -19,6 +20,14 @@ pub struct MeshAsset {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MeshAssetId(pub usize);
 
+#[derive(Debug)]
+pub struct FontAsset{
+    pub font: LoadedFont,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FontAssetId(pub usize);
+
 pub struct Resources {
     mesh_assets: Vec<Option<MeshAsset>>,
     models: HashMap<String, MeshAssetId>,
@@ -26,9 +35,27 @@ pub struct Resources {
     primitive_meshes: Vec<PrimitiveMesh>,
     skybox_mesh: Option<MeshHandle>,
     skybox_textures: HashMap<String, SkyboxTextureHandle>,
+
+    font_assets: Vec<Option<FontAsset>>,
+    fonts: HashMap<String, FontAssetId>,
+    text_system: TextSystem,
 }
 
 impl Resources {
+    /// Parses and registers font bytes under a unique asset name.
+    pub fn register_font(&mut self, name: &str, data: Vec<u8>) -> Result<FontAssetId> {
+        anyhow::ensure!(!self.fonts.contains_key(name), "font already registered: {name}");
+        let font = self.text_system.load_font(data)?;
+        let id = FontAssetId(self.font_assets.len());
+        self.font_assets.push(Some(FontAsset { font }));
+        self.fonts.insert(name.to_string(), id);
+        Ok(id)
+    }
+
+    pub fn font_asset(&self, id: FontAssetId) -> Option<&FontAsset> {
+        self.font_assets.get(id.0)?.as_ref()
+    }
+
     pub fn insert_mesh_asset(&mut self, handle: MeshHandle, auto_release: bool) -> MeshAssetId {
         let id = MeshAssetId(self.mesh_assets.len());
 
@@ -156,6 +183,21 @@ impl Resources {
             })
     }
 
+    // font
+    pub fn font_assets(&self) -> impl Iterator<Item=(FontAssetId, &FontAsset)>{
+        self.font_assets
+            .iter()
+            .enumerate()
+            .filter_map(|(index, font_asset)|{
+                font_asset
+                    .as_ref()
+                    .map(|font_asset| (FontAssetId(index), font_asset))
+            })
+    }
+    pub fn font_asset_id(&self, name: &str) -> Option<FontAssetId> {
+        self.fonts.get(name).copied()
+    }
+
     // reference counter
     pub fn retain_mesh(&mut self, id: MeshAssetId) -> Option<MeshHandle> {
         let asset = self.mesh_assets.get_mut(id.0)?.as_mut()?;
@@ -203,6 +245,10 @@ impl Default for Resources {
             primitive_meshes: Vec::new(),
             skybox_mesh: None,
             skybox_textures: HashMap::new(),
+
+            font_assets: Vec::new(),
+            fonts: HashMap::new(),
+            text_system: TextSystem::default(),
         }
     }
 }
@@ -210,6 +256,16 @@ impl Default for Resources {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_font_registration_leaves_resources_unchanged() {
+        let mut resources = Resources::default();
+        assert!(resources.register_font("invalid", b"not a font".to_vec()).is_err());
+        assert_eq!(resources.font_asset_id("invalid"), None);
+        assert_eq!(resources.font_assets().count(), 0);
+        assert!(resources.font_asset(FontAssetId(0)).is_none());
+        assert!(resources.font_asset(FontAssetId(usize::MAX)).is_none());
+    }
 
     fn mesh_handle(index: usize) -> MeshHandle {
         MeshHandle::new(index, VertexLayout::Mesh3D)

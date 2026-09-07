@@ -3,6 +3,7 @@ members = [
     "crates/engine",
     "crates/renderer_vulkan",
     "crates/kani_volcano_math",
+    "crates/kani_volcano_text",
     "examples/basic_3d",
 ]
 resolver = "2"

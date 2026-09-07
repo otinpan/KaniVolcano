@@ -7,6 +7,7 @@ edition.workspace = true
 anyhow.workspace = true
 cgmath.workspace = true
 log.workspace = true
+kani_volcano_text = { package = "kani-volcano-text", path = "../kani_volcano_text" }
 kani_volcano_math = { package = "kani-volcano-math", path = "../kani_volcano_math" }
 renderer_vulkan = { path = "../renderer_vulkan" }
 winit.workspace = true

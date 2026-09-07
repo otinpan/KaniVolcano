@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
@@ -16,7 +16,7 @@ use crate::primitive::{
 
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
-    UpdateContext,
+    UpdateContext, FontAssetId,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -244,6 +244,17 @@ impl App {
     ) -> Result<SkyboxTextureHandle> {
         let handle = self.renderer.load_skybox_texture(paths)?;
         Ok(self.resources.register_skybox_texture(name, handle))
+    }
+
+    pub unsafe fn load_font(
+        &mut self,
+        name: &str,
+        path: &str,
+    ) -> Result<FontAssetId> {
+        let data = std::fs::read(path)
+            .with_context(|| format!("failed to read font file: {path}"))?;
+
+        self.resources.register_font(name, data)
     }
 
     /// Sets the fixed update interval in seconds.

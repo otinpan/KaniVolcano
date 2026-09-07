@@ -22,13 +22,13 @@ mod world;
 pub use app::App;
 pub use component::{
     Camera, CameraComponent, Component, Material, MeshRenderer, Name, PendingPrimitiveMesh,
-    Rotator, SceneId, SceneOwned, Tags, Visibility,
+    Rotator, SceneId, SceneOwned, Tags, Visibility, Text,
 };
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
 pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
 pub use renderer_vulkan::{PipelineKey, VertexLayout};
-pub use resources::{MeshAsset, MeshAssetId, Resources};
+pub use resources::{MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset};
 pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
 pub use scene_manager::SceneManager;
@@ -49,7 +49,7 @@ pub mod prelude {
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
-        UpdateContext, UpdateSystem, Visibility, run,
+        UpdateContext, UpdateSystem, Visibility, run, Text,
     };
 
     pub use kani_volcano_math::Transform;

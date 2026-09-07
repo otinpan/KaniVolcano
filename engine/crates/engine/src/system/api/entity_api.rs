@@ -162,6 +162,7 @@ pub trait EntityApi {
         self.get_component::<MeshRenderer>(entity)
             .and_then(|renderer| renderer.asset_id)
     }
+
 }
 
 #[cfg(test)]
