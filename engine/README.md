@@ -116,6 +116,14 @@
 
 * フォント/UI
 cosmic-text + etagere
+* ユーザがHelloを表示指示
+* 未登録のglyphをatlasの1or2ページ追加
+* `image.rs/create_mask_texture_from_pixels()`でその1ページをgpuに送信・メモリ確保
+* ユーザがHelloWorldの表示指示
+* 未登録glyphをatlasのページに追加
+* `image.rs/update_mask_texture_from_pixels()`で更新された1ページをgpuに送信
+* すでに確保されたgpuメモリに上書きされる
+
 フォントの読み込み
 1. ユーザー指定のTTF/OTFファイルを読み込み・解析
 2. Resourcesに登録し、FontAssetIdを返す

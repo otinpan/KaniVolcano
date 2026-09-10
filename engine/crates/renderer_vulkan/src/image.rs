@@ -144,8 +144,7 @@ pub unsafe fn create_texture_from_pixels(
     height: u32,
 ) -> Result<Texture> {
     let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
-    let size = pixels.len() as u64;
-
+    let size = u64::try_from(pixels.len())?;
     let (staging_buffer, staging_buffer_memory) = create_buffer(
         instance,
         device,
@@ -216,6 +215,200 @@ pub unsafe fn create_texture_from_pixels(
         mip_levels,
     })
 }
+
+pub unsafe fn create_mask_texture_from_pixels(
+    instance: &Instance,
+    device: &Device,
+    data: &mut VulkanData,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<Texture>{
+    anyhow::ensure!(
+        width>0 && height>0,
+        "mask texture size must be positive"
+    );
+
+    let expected_len=usize::try_from(width)?
+        .checked_mul(usize::try_from(height)?)
+        .ok_or_else(||anyhow!("mask texture size is too large"))?;
+
+    anyhow::ensure!(
+        pixels.len()==expected_len,
+        "invalid mask texture data length"
+    );
+
+    let format=vk::Format::R8_UNORM;
+    let mip_levels=1;
+    let size=u64::try_from(pixels.len())?;
+
+    let (staging_buffer,staging_buffer_memory)=create_buffer(
+        instance,
+        device,
+        data,
+        size,
+        vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+    )?;
+
+    let memory=device.map_memory(staging_buffer_memory,0,size, vk::MemoryMapFlags::empty())?;
+    memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
+    device.unmap_memory(staging_buffer_memory);
+
+    let (image,image_memory) =create_image(
+        instance,
+        device,
+        data,
+        width,
+        height,
+        mip_levels,
+        vk::SampleCountFlags::_1,
+        format,
+        vk::ImageTiling::OPTIMAL,
+        vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    )?;
+
+    transition_image_layout(
+        device,
+        data,
+        image,
+        format,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        mip_levels,
+    )?;
+
+    copy_buffer_to_image(device,data,staging_buffer,image,width,height)?;
+
+    transition_image_layout(
+        device,
+        data,
+        image,
+        format,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        mip_levels,
+    )?;
+
+    device.destroy_buffer(staging_buffer,None);
+    device.free_memory(staging_buffer_memory, None);
+
+    let image_view=create_image_view(
+        device,
+        image,
+        format,
+        vk::ImageAspectFlags::COLOR,
+        mip_levels,
+    )?;
+
+    Ok(Texture { image, image_memory, image_view, mip_levels })
+}
+
+
+
+// update mask texture selecting gpu memory with "texture"
+// send 1 page texture of atlas
+pub unsafe fn update_mask_texture_from_pixels(
+    instance: &Instance,
+    device: &Device,
+    data: &VulkanData,
+    texture: &Texture,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<()> {
+    anyhow::ensure!(
+        width > 0 && height > 0,
+        "mask texture size must be positive"
+    );
+
+    anyhow::ensure!(
+        texture.mip_levels == 1,
+        "mask texture must have one mip level"
+    );
+
+    let expected_len = usize::try_from(width)?
+        .checked_mul(usize::try_from(height)?)
+        .ok_or_else(|| anyhow!("mask texture size is too large"))?;
+
+    anyhow::ensure!(
+        pixels.len() == expected_len,
+        "invalid mask texture data length"
+    );
+
+    let size = u64::try_from(pixels.len())?;
+
+    let (staging_buffer, staging_memory) = create_buffer(
+        instance,
+        device,
+        data,
+        size,
+        vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_VISIBLE
+            | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
+
+    let mapped = match device.map_memory(
+        staging_memory,
+        0,
+        size,
+        vk::MemoryMapFlags::empty(),
+    ) {
+        Ok(mapped) => mapped,
+        Err(error) => {
+            device.destroy_buffer(staging_buffer, None);
+            device.free_memory(staging_memory, None);
+            return Err(error.into());
+        }
+    };
+
+    memcpy(pixels.as_ptr(), mapped.cast(), pixels.len());
+    device.unmap_memory(staging_memory);
+
+    let result = (|| -> Result<()> {
+        transition_image_layout(
+            device,
+            data,
+            texture.image, // distination
+            vk::Format::R8_UNORM,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            1,
+        )?;
+
+        copy_buffer_to_image(
+            device,
+            data,
+            staging_buffer,
+            texture.image,
+            width,
+            height,
+        )?;
+
+        transition_image_layout(
+            device,
+            data,
+            texture.image,
+            vk::Format::R8_UNORM,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            1,
+        )?;
+
+        Ok(())
+    })();
+
+    if result.is_err() {
+        device.queue_wait_idle(data.graphics_queue)?;
+    }
+
+    device.destroy_buffer(staging_buffer, None);
+    device.free_memory(staging_memory, None);
+
+    result
+}
+
 
 unsafe fn create_cubemap_texture_from_pixels(
     instance: &Instance,
@@ -457,6 +650,12 @@ unsafe fn transition_image_layout_layers(
                 vk::AccessFlags::SHADER_READ,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::FRAGMENT_SHADER,
+            ),
+            (vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL, vk::ImageLayout::TRANSFER_DST_OPTIMAL) =>(
+                vk::AccessFlags::SHADER_READ,
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
             ),
             _ => return Err(anyhow!("Unsupported image layout transition!")),
         };
