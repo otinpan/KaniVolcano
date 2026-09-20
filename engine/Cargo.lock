@@ -1227,7 +1227,9 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "cgmath",
+ "cosmic-text",
  "kani-volcano-math",
+ "kani-volcano-text",
  "log",
  "png",
  "thiserror",

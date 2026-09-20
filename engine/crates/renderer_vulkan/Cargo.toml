@@ -11,5 +11,9 @@ png.workspace = true
 thiserror.workspace = true
 tobj.workspace = true
 kani_volcano_math = { package = "kani-volcano-math", path = "../kani_volcano_math" }
+kani_volcano_text = { package = "kani-volcano-text", path = "../kani_volcano_text" }
 vulkanalia.workspace = true
 winit.workspace = true
+
+[dev-dependencies]
+cosmic-text = "0.19"

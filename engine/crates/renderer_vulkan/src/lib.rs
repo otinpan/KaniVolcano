@@ -21,6 +21,7 @@ mod sync;
 mod types;
 mod uniform;
 mod vertex;
+mod text;
 
 use anyhow::{Result, anyhow};
 use cgmath::Matrix4;

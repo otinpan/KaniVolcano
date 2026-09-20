@@ -21,6 +21,27 @@ impl GlyphAtlas{
         )
     }
 
+    pub fn page_count(&self) -> usize{
+        self.pages.len()
+    }
+
+    pub fn page_data(&self, index: usize) -> Option<(u32,u32,&[u8],bool)>{
+        let page=self.pages.get(index)?;
+
+        Some((
+            page.width,
+            page.height,
+            &page.pixels,
+            page.dirty,
+        ))
+    }
+
+    pub fn mark_page_uploaded(&mut self, index: usize){
+        if let Some(page)=self.pages.get_mut(index){
+            page.dirty=false;
+        }
+    }
+
     pub fn insert(
         &mut self,
         key: CacheKey,

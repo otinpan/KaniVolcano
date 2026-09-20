@@ -363,6 +363,7 @@ pub unsafe fn update_mask_texture_from_pixels(
         }
     };
 
+    // copy pixels to staging memory
     memcpy(pixels.as_ptr(), mapped.cast(), pixels.len());
     device.unmap_memory(staging_memory);
 
@@ -377,6 +378,7 @@ pub unsafe fn update_mask_texture_from_pixels(
             1,
         )?;
 
+        // copy staging buffer to texture.image
         copy_buffer_to_image(
             device,
             data,
