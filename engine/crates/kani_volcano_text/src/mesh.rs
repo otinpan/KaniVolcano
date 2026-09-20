@@ -21,6 +21,7 @@ pub struct TextMesh {
     pub batches: Vec<TextBatch>,
 }
 
+// create mesh and map glyph in atlas
 pub fn build_text_mesh(
     system: &mut TextSystem,
     atlas: &mut GlyphAtlas,

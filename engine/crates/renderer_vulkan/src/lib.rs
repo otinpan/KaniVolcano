@@ -66,6 +66,7 @@ use self::uniform::{
 };
 pub use self::vertex::{DebugLineVertex, Mesh3DVertex, SourceVertex, VertexLayout};
 use self::text::{GpuGlyphAtlas};
+pub use self::text::{GpuTextBatch, GpuTextMesh};
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 type Mat4 = Matrix4<f32>;
@@ -509,7 +510,7 @@ impl VulkanRenderer {
         Ok(handle)
     }
 
-
+    // send atlas map to gpu
     pub unsafe fn upload_text_atlas(&mut self) -> Result<()>{
         self.gpu_glyph_atlas.upload_dirty_pages(
             &self.instance,
@@ -517,6 +518,70 @@ impl VulkanRenderer {
             &mut self.data,
             &mut self.glyph_atlas,
         )
+    }
+
+    // send meshes to gpu
+    pub unsafe fn upload_text_mesh(
+        &mut self,
+        text_mesh: &kani_volcano_text::TextMesh,
+    ) -> Result<GpuTextMesh> {
+        use cgmath::{vec2, vec3};
+        use crate::vertex::Ui2DVertex;
+
+        let mut result = GpuTextMesh::default();
+
+        for batch in &text_mesh.batches {
+            if batch.vertices.is_empty() || batch.indices.is_empty() {
+                continue;
+            }
+
+            let vertices = batch.vertices.iter()
+                .map(|vertex| {
+                    Ui2DVertex::new(
+                        vec2(
+                            vertex.position[0],
+                            vertex.position[1],
+                        ),
+                        vec3(1.0, 1.0, 1.0),
+                        vec2(vertex.uv[0], vertex.uv[1]),
+                    )
+                })
+                .collect();
+
+            let mesh_data = MeshData {
+                vertices,
+                indices: batch.indices.clone(),
+            };
+
+            let handle = match self.load_mesh_from_data(
+                mesh_data,
+                VertexLayout::Ui2D,
+            ) {
+                Ok(handle) => handle,
+                Err(error) => {
+                    for uploaded in &result.batches {
+                        self.destroy_mesh(uploaded.mesh)?;
+                    }
+                    return Err(error);
+                }
+            };
+
+            result.batches.push(GpuTextBatch {
+                page: batch.page,
+                mesh: handle,
+            });
+        }
+
+        Ok(result)
+    }
+
+    pub unsafe fn destroy_text_mesh(&mut self, text_mesh: &mut GpuTextMesh) -> Result<()>{
+        while let Some(batch) = text_mesh.batches.last(){
+            self.destroy_mesh(batch.mesh)?;
+            text_mesh.batches.pop();
+        }
+
+        Ok(())
     }
 
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> Result<()> {

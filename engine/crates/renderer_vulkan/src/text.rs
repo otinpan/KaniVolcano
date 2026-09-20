@@ -2,10 +2,23 @@ use anyhow::{Result,anyhow};
 
 use crate::image::{create_mask_texture_from_pixels, update_mask_texture_from_pixels};
 use crate::types::{Texture,VulkanData};
-use crate::{Instance, Device,};
+use crate::{Instance, Device, MeshHandle};
 use kani_volcano_text::GlyphAtlas;
 use vulkanalia::vk::DeviceV1_0;
 
+#[derive(Debug)]
+pub struct GpuTextBatch{
+    pub page: usize,
+    pub mesh: MeshHandle,
+}
+
+#[derive(Debug, Default)]
+pub struct GpuTextMesh{
+    pub batches: Vec<GpuTextBatch>,
+}
+
+
+// 
 pub(crate) struct GpuGlyphAtlas{
     textures: Vec<Option<Texture>>,
 }

@@ -151,13 +151,17 @@ let buffer=text_system.layout_text(
 	32.0,
 );
 
+// create mesh and map glyph in atlas
 let text_mesh: TextMesh=build_text_mesh(
 	text_system,
 	glyph_atlas,
 	buffer
 );
 
+// send atlas to gpu
 renderer.upload_text_atlas();
+// send meshes to gpu
+renderer.upload_text_mesh(text_mesh);
 
 ```
 
