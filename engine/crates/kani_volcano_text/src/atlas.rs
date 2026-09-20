@@ -21,6 +21,10 @@ impl GlyphAtlas{
         )
     }
 
+    pub fn get(&self, key: &CacheKey) -> Option<AtlasGlyph>{
+        self.glyphs.get(key).copied()
+    }
+
     pub fn page_count(&self) -> usize{
         self.pages.len()
     }

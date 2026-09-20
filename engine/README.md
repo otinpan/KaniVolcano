@@ -118,9 +118,11 @@
 cosmic-text + etagere
 * ユーザがHelloを表示指示
 * 未登録のglyphをatlasの1or2ページ追加
+* bufferを作成し、それを基にmeshを作成
 * `image.rs/create_mask_texture_from_pixels()`でその1ページをgpuに送信・メモリ確保
 * ユーザがHelloWorldの表示指示
 * 未登録glyphをatlasのページに追加
+* bufferを作成し、それを基にmeshを作成
 * `image.rs/update_mask_texture_from_pixels()`で更新された1ページをgpuに送信
 * すでに確保されたgpuメモリに上書きされる
 
@@ -141,17 +143,22 @@ GPU描画
 - `assets.font_asset_id(name)`
 
 ```rust
-let bytes = std::fs::read("assets/fonts/main.ttf")?;
-let font = renderer.load_font(bytes)?;
+app.load_font("font",<font-path>);
+let buffer=text_system.layout_text(
+	&font,
+	"Hello\nWorld",
+	24.0,
+	32.0,
+);
 
-// そのフレームで必要なテキストを準備
-renderer.prepare_text_glyphs(font, "Hello", 24.0, 32.0)?;
-renderer.prepare_text_glyphs(font, "World", 24.0, 32.0)?;
+let text_mesh: TextMesh=build_text_mesh(
+	text_system,
+	glyph_atlas,
+	buffer
+);
 
-// すべて準備した後、描画前に1回呼ぶ
-unsafe {
-    renderer.upload_text_atlas()?;
-}
+renderer.upload_text_atlas();
+
 ```
 
 

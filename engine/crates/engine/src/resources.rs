@@ -23,7 +23,7 @@ pub struct MeshAssetId(pub usize);
 
 #[derive(Debug)]
 pub struct FontAsset{
-    pub font: FontHandle,
+    pub handle: FontHandle,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -47,7 +47,7 @@ impl Resources {
         anyhow::ensure!(!self.fonts.contains_key(name), "font already registered: {name}");
         let id=FontAssetId(self.font_assets.len());
 
-        self.font_assets.push(Some(FontAsset{font: handle}));
+        self.font_assets.push(Some(FontAsset{handle}));
         self.fonts.insert(name.to_string(),id);
         Ok(id)
     }
@@ -153,6 +153,13 @@ impl Resources {
 
     pub fn get_mesh_handle(&self, id: MeshAssetId) -> Option<MeshHandle> {
         self.mesh_assets
+            .get(id.0)?
+            .as_ref()
+            .map(|asset| asset.handle)
+    }
+
+    pub fn get_font_handle(&self, id: FontAssetId) -> Option<FontHandle>{
+        self.font_assets
             .get(id.0)?
             .as_ref()
             .map(|asset| asset.handle)

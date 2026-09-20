@@ -6,6 +6,10 @@ use renderer_vulkan::PipelineKey;
 use crate::{
     AssetApi, EntityApi, EntityId, Material, MeshAssetId, MeshRenderer, PrimitiveShape, Visibility,
 };
+use crate::{
+    Text,
+};
+
 
 pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec2 = cgmath::Vector2<f32>;
@@ -37,6 +41,47 @@ pub trait ObjectApi: EntityApi + AssetApi {
         self.add_component(entity, mesh_renderer);
         self.add_component(entity, Visibility::default());
         self.set_tags(entity, ["Model", model_name]);
+
+        Ok(entity)
+    }
+
+    fn spawn_text(
+        &mut self,
+        font_name: &str,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        transform: Transform,
+        color: Vec3,
+        alpha: f32,
+    ) -> Result<EntityId> {
+        anyhow::ensure!(
+            font_size.is_finite() && font_size > 0.0,
+            "font size must be finite and positive"
+        );
+        anyhow::ensure!(
+            line_height.is_finite() && line_height > 0.0,
+            "line height must be finite and positive"
+        );
+        anyhow::ensure!(
+            alpha.is_finite() && (0.0..=1.0).contains(&alpha),
+            "alpha must be between 0 and 1"
+        );
+
+        let font = self.font_asset_id(font_name)?;
+
+        let entity = self.spawn();
+
+        self.add_component(entity, Text {
+            content: text.to_string(),
+            font,
+            font_size,
+            line_height,
+            color,
+            alpha,
+        });
+        self.add_component(entity, transform);
+        self.add_component(entity, Visibility::default());
 
         Ok(entity)
     }
