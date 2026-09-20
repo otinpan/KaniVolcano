@@ -1,4 +1,4 @@
-use anyhow::{Result, Context, anyhow};
+use anyhow::{Result, Context, anyhow, ensure};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
@@ -251,10 +251,16 @@ impl App {
         name: &str,
         path: &str,
     ) -> Result<FontAssetId> {
-        let data = std::fs::read(path)
+        anyhow::ensure!(
+            self.resources.font_asset_id(name).is_none(),
+            "font already registered: {name}"
+        );
+
+        let bytes=std::fs::read(path)
             .with_context(|| format!("failed to read font file: {path}"))?;
 
-        self.resources.register_font(name, data)
+        let handle=self.renderer.load_font(bytes)?;
+        self.resources.register_font(name,handle)
     }
 
     /// Sets the fixed update interval in seconds.

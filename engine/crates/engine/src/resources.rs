@@ -3,9 +3,10 @@ use anyhow::Result;
 use cgmath::Vector3;
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
+    FontHandle,
 };
 use std::collections::HashMap;
-use kani_volcano_text::{LoadedFont, TextSystem};
+use kani_volcano_text::{TextSystem};
 
 pub type Vec3 = Vector3<f32>;
 
@@ -22,7 +23,7 @@ pub struct MeshAssetId(pub usize);
 
 #[derive(Debug)]
 pub struct FontAsset{
-    pub font: LoadedFont,
+    pub font: FontHandle,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,17 +39,16 @@ pub struct Resources {
 
     font_assets: Vec<Option<FontAsset>>,
     fonts: HashMap<String, FontAssetId>,
-    text_system: TextSystem,
 }
 
 impl Resources {
     /// Parses and registers font bytes under a unique asset name.
-    pub fn register_font(&mut self, name: &str, data: Vec<u8>) -> Result<FontAssetId> {
+    pub fn register_font(&mut self, name: &str, handle: FontHandle) -> Result<FontAssetId> {
         anyhow::ensure!(!self.fonts.contains_key(name), "font already registered: {name}");
-        let font = self.text_system.load_font(data)?;
-        let id = FontAssetId(self.font_assets.len());
-        self.font_assets.push(Some(FontAsset { font }));
-        self.fonts.insert(name.to_string(), id);
+        let id=FontAssetId(self.font_assets.len());
+
+        self.font_assets.push(Some(FontAsset{font: handle}));
+        self.fonts.insert(name.to_string(),id);
         Ok(id)
     }
 
@@ -130,6 +130,7 @@ impl Resources {
     pub fn model_asset_id(&self, name: &str) -> Option<MeshAssetId> {
         self.models.get(name).copied()
     }
+
 
     pub fn get_texture_handle(&self, name: &str) -> Option<TextureHandle> {
         self.textures.get(name).copied()
@@ -248,7 +249,6 @@ impl Default for Resources {
 
             font_assets: Vec::new(),
             fonts: HashMap::new(),
-            text_system: TextSystem::default(),
         }
     }
 }
@@ -256,11 +256,13 @@ impl Default for Resources {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use renderer_vulkan::{FontHandle};
 
     #[test]
     fn invalid_font_registration_leaves_resources_unchanged() {
         let mut resources = Resources::default();
-        assert!(resources.register_font("invalid", b"not a font".to_vec()).is_err());
+        let handle=FontHandle(9);
+        assert!(resources.register_font("invalid", handle).is_err());
         assert_eq!(resources.font_asset_id("invalid"), None);
         assert_eq!(resources.font_assets().count(), 0);
         assert!(resources.font_asset(FontAssetId(0)).is_none());

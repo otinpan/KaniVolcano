@@ -71,7 +71,7 @@ pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 type Mat4 = Matrix4<f32>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FontHandle(usize);
+pub struct FontHandle(pub usize);
 
 pub struct VulkanRenderer {
     entry: Entry,
