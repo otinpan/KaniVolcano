@@ -4,6 +4,7 @@ use crate::image::{create_mask_texture_from_pixels, update_mask_texture_from_pix
 use crate::types::{Texture,VulkanData};
 use crate::{Instance, Device,};
 use kani_volcano_text::GlyphAtlas;
+use vulkanalia::vk::DeviceV1_0;
 
 pub(crate) struct GpuGlyphAtlas{
     textures: Vec<Option<Texture>>,
@@ -69,10 +70,18 @@ impl GpuGlyphAtlas{
                 Some(_) =>continue,
             }
 
-            // if successed make dirty be false
+            // if successed, make dirty be false
             atlas.mark_page_uploaded(index);
         }
         Ok(())
+    }
+
+    pub unsafe fn destroy(&mut self, device: &Device) {
+        for texture in self.textures.drain(..).flatten() {
+            device.destroy_image_view(texture.image_view, None);
+            device.destroy_image(texture.image, None);
+            device.free_memory(texture.image_memory, None);
+        }
     }
 }
 

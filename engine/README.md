@@ -140,6 +140,20 @@ GPU描画
 - `app.load_font(name,path)`
 - `assets.font_asset_id(name)`
 
+```rust
+let bytes = std::fs::read("assets/fonts/main.ttf")?;
+let font = renderer.load_font(bytes)?;
+
+// そのフレームで必要なテキストを準備
+renderer.prepare_text_glyphs(font, "Hello", 24.0, 32.0)?;
+renderer.prepare_text_glyphs(font, "World", 24.0, 32.0)?;
+
+// すべて準備した後、描画前に1回呼ぶ
+unsafe {
+    renderer.upload_text_atlas()?;
+}
+```
+
 
 * 当たり判定
   - BoxCollider

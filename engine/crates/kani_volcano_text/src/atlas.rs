@@ -153,6 +153,10 @@ impl GlyphAtlas{
 
         Ok(Some(glyph))
     }
+
+    pub fn contains(&self, key: &CacheKey) -> bool{
+        self.glyphs.contains_key(key)
+    }
 }
 
 // a page of atlas texture

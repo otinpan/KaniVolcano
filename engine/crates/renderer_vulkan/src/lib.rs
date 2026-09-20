@@ -26,6 +26,7 @@ mod text;
 use anyhow::{Result, anyhow};
 use cgmath::Matrix4;
 use kani_volcano_math::Transform;
+use kani_volcano_text::{LoadedFont, GlyphAtlas, TextSystem};
 use std::mem::size_of;
 use std::ptr::copy_nonoverlapping as memcpy;
 use vulkanalia::prelude::v1_0::*;
@@ -64,9 +65,13 @@ use self::uniform::{
     update_light_uniform_buffer, update_uniform_buffer,
 };
 pub use self::vertex::{DebugLineVertex, Mesh3DVertex, SourceVertex, VertexLayout};
+use self::text::{GpuGlyphAtlas};
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 type Mat4 = Matrix4<f32>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FontHandle(usize);
 
 pub struct VulkanRenderer {
     entry: Entry,
@@ -75,6 +80,13 @@ pub struct VulkanRenderer {
     device: Device,
     frame: usize,
     pub resized: bool,
+
+    // text
+    text_system: TextSystem,
+    glyph_atlas: GlyphAtlas,
+    gpu_glyph_atlas: GpuGlyphAtlas,
+
+    fonts: Vec<LoadedFont>,
 }
 
 impl VulkanRenderer {
@@ -83,6 +95,9 @@ impl VulkanRenderer {
         let mut data = VulkanData::default();
         let instance = create_instance(window, &entry, &mut data)?;
         data.surface = vk_window::create_surface(&instance, &window, &window)?;
+        let text_system=TextSystem::default();
+        let glyph_atlas=GlyphAtlas::new(1024,1024)?;
+        let gpu_glyph_atlas=GpuGlyphAtlas::new();
         // device
         pick_physical_device(&instance, &mut data)?;
         let device = create_logical_device(&entry, &instance, &mut data)?;
@@ -119,6 +134,10 @@ impl VulkanRenderer {
             device,
             frame: 0,
             resized: false,
+            text_system,
+            glyph_atlas,
+            gpu_glyph_atlas,
+            fonts: Vec::new(),
         })
     }
 
@@ -478,6 +497,67 @@ impl VulkanRenderer {
         self.data.camera = camera;
     }
 
+    // font /////////////////////////////////////////////////////////////////////////////
+    /* let data = std::fs::read(&path).context("failed to read font file")?;
+    let font = system.load_font(data)?; */
+    pub fn load_font(&mut self, bytes: Vec<u8>) -> Result<FontHandle>{
+        let font=self.text_system.load_font(bytes)?;
+
+        let handle=FontHandle(self.fonts.len());
+        self.fonts.push(font);
+
+        Ok(handle)
+    }
+
+    pub fn prepare_text_glyph(
+        &mut self,
+        font: FontHandle,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+    ) -> Result<()>{
+        let loaded_font=self.fonts
+            .get(font.0)
+            .ok_or_else(|| anyhow!("font handle not fount"))?;
+
+        let buffer=self.text_system.layout_text(
+            loaded_font,
+            text,
+            font_size,
+            line_height,
+        )?;
+
+        // register glyph in atlas
+        for run in buffer.layout_runs(){
+            for glyph in run.glyphs.iter(){
+                let physical=glyph.physical((0.0,0.0),1.0);
+                let key=physical.cache_key;
+
+                if self.glyph_atlas.contains(&key){
+                    continue;
+                }
+
+                let Some(image)=self.text_system.rasterize_glyph(key)
+                else{
+                    continue;
+                };
+
+                self.glyph_atlas.insert(key,image)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub unsafe fn upload_text_atlas(&mut self) -> Result<()>{
+        self.gpu_glyph_atlas.upload_dirty_pages(
+            &self.instance,
+            &self.device,
+            &mut self.data,
+            &mut self.glyph_atlas,
+        )
+    }
+
     unsafe fn recreate_swapchain(&mut self, window: &Window) -> Result<()> {
         self.device.device_wait_idle()?;
         self.destroy_swapchain();
@@ -505,6 +585,8 @@ impl VulkanRenderer {
         self.device.device_wait_idle().unwrap();
 
         self.destroy_swapchain();
+
+        self.gpu_glyph_atlas.destroy(&self.device);
 
         self.data
             .command_pools
