@@ -254,6 +254,72 @@ context.spawn_circle_2d(
 
 ![](../../../assets/tutorial_2d_primitives.png)
 
+## Text Rendering
+
+You can render text on the screen.
+
+```rust
+let hello_world = context.spawn_text(
+    "eng_font", // font name
+    "Hello\nWorld", // content
+    100.0, // font size
+    100.0, // line height
+    Transform {
+        position: vec3(0.0, 0.0, 0.0),
+        scale: vec3(1.0, 2.0, 0.0),
+        ..Default::default()
+    },
+    vec3(1.0, 1.0, 0.0), // color
+    0.5, // alpha
+);
+
+let ya = context.spawn_text(
+    "jpn_font",
+    "やあ",
+    100.0,
+    100.0,
+    Transform {
+        position: vec3(0.5, 0.5, 0.0),
+        rotation: vec3(45.0, 0.0, 0.0),
+        ..Default::default()
+    },
+    vec3(1.0, 0.0, 1.0),
+    1.0,
+);
+```
+
+![](../../../assets/tutorial_font.png)
+
+You can also render text by attaching a `Text` component to an entity.
+
+```rust
+let font = context.font_asset_id("eng_font")?;
+
+let hello_world = context.spawn();
+
+context.add_component(
+    hello_world,
+    Transform {
+        position: vec3(0.0, 0.0, 0.0),
+        scale: vec3(1.0, 2.0, 0.0),
+        ..Default::default()
+    },
+);
+
+context.add_component(
+    hello_world,
+    Text {
+        content: "Hello\nWorld".to_string(),
+        font,
+        font_size: 100.0,
+        line_height: 100.0,
+        color: vec3(1.0, 1.0, 0.0),
+        alpha: 0.5,
+    },
+);
+```
+
+
 ## Reusing Existing Primitive Meshes
 
 You can get an existing primitive mesh and create another entity from it.

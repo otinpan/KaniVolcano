@@ -4,7 +4,7 @@ KaniVolcano is a small Rust game engine built on Vulkan.
 
 It is designed around ECS, scenes, and context-based APIs so users can create entities, attach components, register systems, load assets, and draw 2D/3D objects without directly managing Vulkan resources.
 
-![](assets/engine_screenshot.png)
+![](assets/engine_font.png)
 
 ## Features
 

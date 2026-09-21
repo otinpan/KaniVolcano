@@ -88,6 +88,19 @@ unsafe {
 }
 ```
 
+### Font
+
+You can load fonts into the engine. When rendering text, you need to specify a font that has been loaded in advance.
+
+```rust
+unsafe fn load_fonts(app: &mut App) -> Result<()> {
+    app.load_font("eng_font", r"C:\Windows\Fonts\arial.ttf")?;
+    app.load_font("jpn_font", r"C:\Windows\Fonts\NotoSansJP-VF.ttf")?;
+    Ok(())
+}
+```
+
+
 ## Scene Management
 
 Create a type that implements `Scene`, register it, and set it as the current scene.
