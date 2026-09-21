@@ -559,6 +559,9 @@ unsafe fn update_secondary_command_buffer(
             renderer.device.end_command_buffer(command_buffer)?;
             return Ok(command_buffer);
         }
+        PipelineKey::TextUi2D =>{
+            //TODO create command pipeline for TextUi2D
+        }
     }
 
     renderer

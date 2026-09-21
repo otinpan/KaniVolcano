@@ -49,7 +49,7 @@ use self::model::{MeshData, load_model_source};
 pub use self::model::{SourceMesh, SourceTopology};
 use self::pipeline::{
     create_debug_line_pipeline, create_lit3d_pipeline, create_mesh3d_pipeline, create_render_pass,
-    create_skybox_pipeline, create_transparent3d_pipeline, create_ui2d_pipeline,
+    create_skybox_pipeline, create_transparent3d_pipeline, create_ui2d_pipeline, create_text_ui2d_pipeline,
 };
 use self::swapchain::{create_framebuffers, create_swapchain, create_swapchain_image_views};
 use self::sync::{create_render_finished_semaphores, create_sync_objects};
@@ -731,6 +731,7 @@ unsafe fn create_pipelines(device: &Device, data: &mut VulkanData) -> Result<()>
     create_transparent3d_pipeline(device, data)?;
     create_lit3d_pipeline(device, data)?;
     create_ui2d_pipeline(device, data)?;
+    create_text_ui2d_pipeline(device, data)?;
     create_skybox_pipeline(device, data)?;
 
     Ok(())

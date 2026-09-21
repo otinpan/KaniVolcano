@@ -17,8 +17,10 @@ pub struct GpuTextMesh{
     pub batches: Vec<GpuTextBatch>,
 }
 
-
-// 
+// record gpu memory for texture
+// create new page, store and send to gpu
+// update dirty page
+// release memory
 pub(crate) struct GpuGlyphAtlas{
     textures: Vec<Option<Texture>>,
 }

@@ -162,8 +162,25 @@ let text_mesh: TextMesh=build_text_mesh(
 renderer.upload_text_atlas();
 // send meshes to gpu
 renderer.upload_text_mesh(text_mesh);
-
 ```
+
+* 文字用パイプラインを作る
+	- シェーダー、頂点形式、push constant、アルファブレンディングを設定
+
+* アトラス用ディスクリプタを作る
+	- ページ番号から、そのGPUテクスチャを参照できるようにする
+
+* engine側で描画キャッシュを保持する
+	- EntityId → GpuTextMesh と、再生成を判断するための前回の文字列・フォント・サイズなどを保存
+
+* TextRenderSystem から描画情報を渡す
+	- 初回・変更時にメッシュを準備し、表示対象の各バッチから TextRenderItem を作ってrendererへ渡す
+
+* command.rs で描画命令を記録する
+	- パイプライン・アトラスのディスクリプタ・メッシュ・push constantを指定して draw_indexed を呼ぶ
+
+不要になったメッシュを解放する
+Entity削除、Text の取り外し、メッシュの置き換えに対応します。
 
 
 * 当たり判定

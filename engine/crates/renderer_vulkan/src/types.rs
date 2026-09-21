@@ -47,6 +47,7 @@ pub struct VulkanData {
     // Mesh/Object data for the next renderer step.
     pub meshes: Vec<Option<Mesh>>,
     pub render_objects: Vec<RenderItem>,
+    pub text_render_objects: Vec<TextRenderItem>,
     pub skybox: Option<RenderSkybox>,
     // Buffers
     pub uniform_buffers: Vec<vk::Buffer>,
@@ -125,6 +126,7 @@ pub enum PipelineKey {
     Lit3D,
     Ui2D,
     Skybox,
+    TextUi2D,
 }
 
 impl PipelineKey {
@@ -136,6 +138,7 @@ impl PipelineKey {
             PipelineKey::Lit3D => VertexLayout::Lit3D,
             PipelineKey::Ui2D => VertexLayout::Ui2D,
             PipelineKey::Skybox => VertexLayout::Skybox,
+            PipelineKey::TextUi2D => VertexLayout::Ui2D,
         }
     }
 }
@@ -170,6 +173,15 @@ pub struct RenderItem {
     pub texture_index: TextureHandle, // use Texture from VulkanData::textures
     pub pipeline_key: PipelineKey,
     pub is_visible: bool,
+}
+
+#[derive(Clone,Debug)]
+pub struct TextRenderItem{
+    pub mesh: MeshHandle,
+    pub atlas_page: usize,
+    pub transform: Transform,
+    pub alpha: f32,
+    pub color: [f32;4],
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
