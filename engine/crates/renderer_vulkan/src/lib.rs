@@ -517,6 +517,11 @@ impl VulkanRenderer {
             &self.device,
             &mut self.data,
             &mut self.glyph_atlas,
+        )?;
+
+        self.gpu_glyph_atlas.ensure_descriptors(
+            &self.device, 
+            &self.data
         )
     }
 

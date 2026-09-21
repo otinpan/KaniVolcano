@@ -5,6 +5,7 @@ use crate::types::{Texture,VulkanData};
 use crate::{Instance, Device, MeshHandle};
 use kani_volcano_text::GlyphAtlas;
 use vulkanalia::vk::DeviceV1_0;
+use vulkanalia::prelude::v1_0::*;
 
 #[derive(Debug)]
 pub struct GpuTextBatch{
@@ -17,18 +18,26 @@ pub struct GpuTextMesh{
     pub batches: Vec<GpuTextBatch>,
 }
 
+
+struct AtlasDescriptor{
+    pool: vk::DescriptorPool,
+    set: vk::DescriptorSet,
+}
+
 // record gpu memory for texture
 // create new page, store and send to gpu
 // update dirty page
 // release memory
 pub(crate) struct GpuGlyphAtlas{
     textures: Vec<Option<Texture>>,
+    descriptors: Vec<Option<AtlasDescriptor>>,
 }
 
 impl GpuGlyphAtlas{
     pub fn new() -> Self{
         Self{
             textures: Vec::new(),
+            descriptors: Vec::new(),
         }
     }
 
@@ -53,6 +62,7 @@ impl GpuGlyphAtlas{
             }
         })
     }
+
 
     // Keep page bookkeeping testable without creating a Vulkan device.
     fn upload_dirty_pages_with(
@@ -91,13 +101,115 @@ impl GpuGlyphAtlas{
         Ok(())
     }
 
+
+    pub unsafe fn ensure_descriptors(
+        &mut self,
+        device: &Device,
+        data: &VulkanData,
+    ) -> Result<()>{
+        while self.descriptors.len() < self.textures.len(){
+            self.descriptors.push(None);
+        }
+
+        for (index,texture) in self.textures.iter().enumerate(){
+            if self.descriptors[index].is_some(){
+                continue;
+            }
+
+            let Some(texture)=texture else{
+                continue;
+            };
+
+            let descriptor=create_atlas_descriptor(
+                device,
+                data.material_descriptor_set_layout,
+                data.texture_sampler,
+                texture
+            )?;
+
+            self.descriptors[index]=Some(descriptor);
+        }
+
+        Ok(())
+    }
+
+    pub fn descriptor_set(
+        &self,
+        page: usize,
+    ) -> Option<vk::DescriptorSet>{
+        self.descriptors
+            .get(page)?
+            .as_ref()
+            .map(|descriptor| descriptor.set)
+    }
+
     pub unsafe fn destroy(&mut self, device: &Device) {
+        for descriptor in self.descriptors.drain(..).flatten(){
+            device.destroy_descriptor_pool(descriptor.pool,None);
+        }
+
         for texture in self.textures.drain(..).flatten() {
             device.destroy_image_view(texture.image_view, None);
             device.destroy_image(texture.image, None);
             device.free_memory(texture.image_memory, None);
         }
     }
+}
+
+unsafe fn create_atlas_descriptor(
+    device: &Device,
+    layout: vk::DescriptorSetLayout,
+    sampler: vk::Sampler,
+    texture: &Texture,
+) -> Result<AtlasDescriptor> {
+    let pool_sizes = [
+        vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1),
+    ];
+
+    let pool_info = vk::DescriptorPoolCreateInfo::builder()
+        .max_sets(1)
+        .pool_sizes(&pool_sizes);
+
+    let pool = device.create_descriptor_pool(&pool_info, None)?;
+
+    let layouts = [layout];
+    let allocate_info = vk::DescriptorSetAllocateInfo::builder()
+        .descriptor_pool(pool)
+        .set_layouts(&layouts);
+
+    let sets = match device.allocate_descriptor_sets(&allocate_info) {
+        Ok(sets) => sets,
+        Err(error) => {
+            device.destroy_descriptor_pool(pool, None);
+            return Err(error.into());
+        }
+    };
+
+    let set = sets[0];
+
+    let image_infos = [
+        vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(texture.image_view)
+            .sampler(sampler),
+    ];
+
+    let writes = [
+        vk::WriteDescriptorSet::builder()
+            .dst_set(set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_infos),
+    ];
+
+    device.update_descriptor_sets(
+        &writes,
+        &[] as &[vk::CopyDescriptorSet],
+    );
+
+    Ok(AtlasDescriptor { pool, set })
 }
 
 #[cfg(test)]
@@ -155,7 +267,7 @@ mod tests {
     fn clean_existing_page_is_not_uploaded() -> Result<()> {
         let mut atlas = GlyphAtlas::new(8, 8)?;
         atlas.mark_page_uploaded(0);
-        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))] };
+        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))], descriptors: Vec::new() };
         gpu.upload_dirty_pages_with(&mut atlas, |_, _, _, _| {
             panic!("clean page should not be uploaded")
         })?;
@@ -168,7 +280,7 @@ mod tests {
         let mut atlas = GlyphAtlas::new(8, 8)?;
         insert_full_page(&mut atlas, 7)?;
         let expected = atlas.page_data(0).unwrap().2.to_vec();
-        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))] };
+        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))], descriptors: Vec::new() };
         let mut calls = 0;
         gpu.upload_dirty_pages_with(&mut atlas, |existing, pixels, width, height| {
             calls += 1;
@@ -189,7 +301,7 @@ mod tests {
         insert_full_page(&mut atlas, 1)?;
         insert_full_page(&mut atlas, 2)?;
         assert_eq!(atlas.page_count(), 2);
-        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))] };
+        let mut gpu = GpuGlyphAtlas { textures: vec![Some(texture(1))], descriptors: Vec::new() };
         let mut calls = Vec::new();
         gpu.upload_dirty_pages_with(&mut atlas, |existing, pixels, _, _| {
             calls.push(existing.is_some());
@@ -206,7 +318,7 @@ mod tests {
     fn failed_upload_keeps_dirty_flag_and_existing_handle() -> Result<()> {
         for existing in [None, Some(texture(1))] {
             let mut atlas = GlyphAtlas::new(8, 8)?;
-            let mut gpu = GpuGlyphAtlas { textures: vec![existing] };
+            let mut gpu = GpuGlyphAtlas { textures: vec![existing], descriptors: Vec::new() };
             let result = gpu.upload_dirty_pages_with(&mut atlas, |_, _, _, _| {
                 Err(anyhow!("simulated upload failure"))
             });

@@ -1,7 +1,8 @@
 use super::VulkanRenderer;
 use super::device::QueueFamilyIndices;
 use super::types::{PipelineKey, RenderSkybox, VulkanData};
-use anyhow::Result;
+use super::vertex::VertexLayout;
+use anyhow::{Result,anyhow};
 use cgmath::{Deg, vec3};
 use vulkanalia::prelude::v1_0::*;
 
@@ -18,6 +19,62 @@ struct FragmentPushConstants {
 #[derive(Copy, Clone)]
 struct Ui2DTransformPushConstants {
     transform: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct TextPushConstants {
+    transform: [[f32; 4]; 4],
+    color: [f32; 4],
+    viewport_size: [f32; 2],
+    padding: [f32; 2],
+}
+
+impl TextPushConstants {
+    fn new(item: &super::types::TextRenderItem, extent: vk::Extent2D) -> Self {
+        Self {
+            transform: item.transform.matrix().into(),
+            // Color alpha and overall opacity are multiplied independently.
+            color: [item.color[0], item.color[1], item.color[2], item.color[3] * item.alpha],
+            viewport_size: [extent.width as f32, extent.height as f32],
+            padding: [0.0; 2],
+        }
+    }
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::*;
+
+    #[test]
+    fn push_constants_match_text_shader_offsets() {
+        assert_eq!(std::mem::size_of::<TextPushConstants>(), 96);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, transform), 0);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, color), 64);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, viewport_size), 80);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, padding), 88);
+    }
+
+    #[test]
+    fn push_constants_preserve_transform_and_combine_opacity() {
+        let item = super::super::types::TextRenderItem {
+            mesh: super::super::types::MeshHandle::new(0, VertexLayout::Ui2D),
+            atlas_page: 0,
+            transform: kani_volcano_math::Transform {
+                position: vec3(20.0, 30.0, 0.0),
+                rotation: vec3(0.0, 0.0, 45.0),
+                scale: vec3(2.0, 3.0, 1.0),
+            },
+            alpha: 0.5,
+            color: [1.0, 0.25, 0.75, 0.5],
+        };
+        let constants = TextPushConstants::new(&item, vk::Extent2D { width: 1280, height: 720 });
+        let expected: [[f32; 4]; 4] = item.transform.matrix().into();
+        assert_eq!(constants.transform, expected);
+        assert_eq!(constants.color, [1.0, 0.25, 0.75, 0.25]);
+        assert_eq!(constants.viewport_size, [1280.0, 720.0]);
+        assert_eq!(constants.padding, [0.0; 2]);
+    }
 }
 
 // command pool ////////////////////////////////////////////////////////////
@@ -147,6 +204,10 @@ pub unsafe fn update_command_buffer(
             .collect::<Result<Vec<_>, _>>()?,
     );
 
+    if !renderer.data.text_render_objects.is_empty() {
+        secondary_command_buffers.push(text_command_buffer(renderer, image_index)?);
+    }
+
     if !secondary_command_buffers.is_empty() {
         renderer
             .device
@@ -157,6 +218,75 @@ pub unsafe fn update_command_buffer(
     renderer.device.end_command_buffer(command_buffer)?;
 
     Ok(())
+}
+
+// Record UI text after ordinary render items, preserving text batch order.
+unsafe fn text_command_buffer(
+    renderer: &mut VulkanRenderer,
+    image_index: usize,
+) -> Result<vk::CommandBuffer> {
+    let extent = renderer.data.swapchain_extent;
+    anyhow::ensure!(extent.width > 0 && extent.height > 0, "text viewport is empty");
+    let pipeline = renderer.data.pipelines.iter()
+        .find(|pipeline| pipeline.key == PipelineKey::TextUi2D)
+        .copied()
+        .ok_or_else(|| anyhow!("TextUi2D pipeline not found"))?;
+
+    // Resolve resources before beginning the secondary command buffer.
+    let draws = renderer.data.text_render_objects.iter().map(|item| {
+        let mesh = renderer.data.meshes.get(item.mesh.index)
+            .and_then(|slot| slot.as_ref())
+            .ok_or_else(|| anyhow!("text mesh not found: {}", item.mesh.index))?;
+        anyhow::ensure!(
+            item.mesh.vertex_layout == VertexLayout::Ui2D
+                && mesh.vertex_layout == VertexLayout::Ui2D,
+            "text mesh must use Ui2D vertices"
+        );
+        let descriptor = renderer.gpu_glyph_atlas.descriptor_set(item.atlas_page)
+            .ok_or_else(|| anyhow!("atlas descriptor not found: {}", item.atlas_page))?;
+        Ok((mesh.vertex_buffer, mesh.index_buffer, mesh.index_count,
+            descriptor, TextPushConstants::new(item, extent)))
+    }).collect::<Result<Vec<_>>>()?;
+
+    // Slot 0 is the skybox; ordinary objects use model_index + 1.
+    let slot = renderer.data.render_objects.len() + 1;
+    renderer.data.secondary_command_buffers.resize_with(image_index + 1, Vec::new);
+    let buffers = &mut renderer.data.secondary_command_buffers[image_index];
+    while buffers.len() <= slot {
+        let allocation = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(renderer.data.command_pools[image_index])
+            .level(vk::CommandBufferLevel::SECONDARY)
+            .command_buffer_count(1);
+        buffers.push(renderer.device.allocate_command_buffers(&allocation)?[0]);
+    }
+    let command_buffer = buffers[slot];
+    let inheritance = vk::CommandBufferInheritanceInfo::builder()
+        .render_pass(renderer.data.render_pass)
+        .subpass(0)
+        .framebuffer(renderer.data.framebuffers[image_index]);
+    let begin = vk::CommandBufferBeginInfo::builder()
+        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT
+            | vk::CommandBufferUsageFlags::RENDER_PASS_CONTINUE)
+        .inheritance_info(&inheritance);
+    renderer.device.begin_command_buffer(command_buffer, &begin)?;
+    renderer.device.cmd_bind_pipeline(command_buffer,
+        vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
+
+    for (vertex_buffer, index_buffer, index_count, descriptor, constants) in draws {
+        renderer.device.cmd_bind_descriptor_sets(command_buffer,
+            vk::PipelineBindPoint::GRAPHICS, pipeline.layout, 0, &[descriptor], &[]);
+        renderer.device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
+        renderer.device.cmd_bind_index_buffer(command_buffer, index_buffer, 0, vk::IndexType::UINT32);
+        let bytes = std::slice::from_raw_parts(
+            &constants as *const TextPushConstants as *const u8,
+            std::mem::size_of::<TextPushConstants>(),
+        );
+        renderer.device.cmd_push_constants(command_buffer, pipeline.layout,
+            vk::ShaderStageFlags::VERTEX, 0, bytes);
+        renderer.device.cmd_draw_indexed(command_buffer, index_count, 1, 0, 0, 0);
+    }
+    renderer.device.end_command_buffer(command_buffer)?;
+    Ok(command_buffer)
 }
 
 unsafe fn update_skybox_command_buffer(
@@ -555,12 +685,13 @@ unsafe fn update_secondary_command_buffer(
                 material_bytes,
             );
         }
-        PipelineKey::Skybox => {
+        PipelineKey::TextUi2D =>{
             renderer.device.end_command_buffer(command_buffer)?;
             return Ok(command_buffer);
         }
-        PipelineKey::TextUi2D =>{
-            //TODO create command pipeline for TextUi2D
+        PipelineKey::Skybox => {
+            renderer.device.end_command_buffer(command_buffer)?;
+            return Ok(command_buffer);
         }
     }
 
