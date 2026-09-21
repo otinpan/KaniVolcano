@@ -14,6 +14,7 @@ impl Scene for BasicFieldScene {
         context.set_skybox("default")?;
         self.create_camera(context)?;
         self.create_fundation(context)?;
+        self.create_texts(context)?;
 
         self.add_update_systems(context);
 
@@ -68,6 +69,45 @@ impl BasicFieldScene {
             PipelineKey::Mesh3D,
         )?;
 
+        Ok(())
+    }
+    fn create_texts(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
+        let font=context.font_asset_id("eng_font")?;
+
+        let hello_world=context.spawn();
+        context.add_component(
+            hello_world,
+            Transform {
+                position: vec3(0.0, 0.0, 0.0),
+                scale: vec3(1.0,2.0,0.0),
+                ..Default::default()
+            },
+        );
+        context.add_component(
+            hello_world,
+            Text{
+                content: "Hello\nWorld".to_string(),
+                font: font,
+                font_size: 100.0,
+                line_height: 100.0,
+                color: vec3(1.0,1.0,0.0),
+                alpha: 0.5,
+            }
+        );
+
+        let wow=context.spawn_text(
+            "jpn_font",
+            "やあ",
+            100.0,
+            100.0,
+            Transform{
+                position: vec3(0.5,0.5,0.0),
+                rotation: vec3(45.0,0.0,0.0),
+                ..Default::default()
+            },
+            vec3(1.0,0.0,1.0),
+            1.0,
+        );
         Ok(())
     }
 

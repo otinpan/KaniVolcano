@@ -86,6 +86,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
         Ok(entity)
     }
 
+
     fn spawn_primitive_from_mesh(
         &mut self,
         asset_id: MeshAssetId,

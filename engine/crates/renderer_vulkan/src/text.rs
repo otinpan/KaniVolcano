@@ -18,7 +18,7 @@ pub struct GpuTextMesh{
     pub batches: Vec<GpuTextBatch>,
 }
 
-
+// descriptors dedicated for atlas texture
 struct AtlasDescriptor{
     pool: vk::DescriptorPool,
     set: vk::DescriptorSet,

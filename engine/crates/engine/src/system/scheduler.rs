@@ -3,7 +3,7 @@ use anyhow::Result;
 use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
-    UpdateSystem,
+    UpdateSystem, TextRenderSystem,
 };
 
 use crate::{Input, Resources, SceneCommandQueue, Time, World};
@@ -16,6 +16,7 @@ pub struct Scheduler {
     pub command_system: CommandSystem,
     pub input_system: InputSystem,
     pub render_system: RenderSystem,
+    pub text_render_system: TextRenderSystem,
     pub render_commands: RenderCommandQueue,
     update_systems: Vec<ScheduledUpdateSystem>,
     fixed_update_systems: Vec<ScheduledUpdateSystem>,
@@ -33,6 +34,7 @@ impl Scheduler {
         command_system: CommandSystem,
         input_system: InputSystem,
         render_system: RenderSystem,
+        text_render_system: TextRenderSystem,
         render_commands: RenderCommandQueue,
         update_systems: Vec<ScheduledUpdateSystem>,
         fixed_update_systems: Vec<ScheduledUpdateSystem>,
@@ -41,6 +43,7 @@ impl Scheduler {
             command_system,
             input_system,
             render_system,
+            text_render_system,
             render_commands,
             update_systems,
             fixed_update_systems,
@@ -179,8 +182,12 @@ impl Scheduler {
     ) -> Result<()> {
         let mut context = RenderContext::new(world, resources, renderer, &mut self.render_commands);
 
-        self.render_system.update(&mut context)
+        self.render_system.update(&mut context)?;
+        self.text_render_system.update(&mut context)?;
+
+        Ok(())
     }
+
 }
 
 impl Default for Scheduler {
@@ -189,6 +196,7 @@ impl Default for Scheduler {
             command_system: CommandSystem,
             input_system: InputSystem::new(),
             render_system: RenderSystem,
+            text_render_system: TextRenderSystem::default(),
             render_commands: RenderCommandQueue::default(),
             update_systems: Vec::new(),
             fixed_update_systems: Vec::new(),

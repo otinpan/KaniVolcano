@@ -37,3 +37,25 @@ Enable users register systems that are updated per fixed time step.
 ```rust
 scene_context.add_fixed_update_system(name, system)
 ```
+
+## ver0.2.0
+### font
+Users can use font in ver0.2.0
+```rust
+app.load_font("eng_font", r"C:\Windows\Fonts\arial.ttf")?;
+```
+```rust
+let hello_world=context.spawn_text(
+    "eng_font",
+    "Hello\nWorld",
+    100.0,
+    100.0,
+    Transform{
+        position: vec3(0.5,0.5,0.0),
+        rotation: vec3(45.0,0.0,0.0),
+        ..Default::default()
+    },
+    vec3(1.0,0.0,1.0),
+    1.0,
+);
+```

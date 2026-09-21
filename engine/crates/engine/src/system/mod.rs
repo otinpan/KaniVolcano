@@ -14,6 +14,7 @@ mod render_system;
 mod scene_command;
 mod scheduler;
 mod update;
+mod text_render_system;
 
 pub use api::{
     AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi,
@@ -29,3 +30,4 @@ pub use render_system::{RenderContext, RenderSystem};
 pub use scene_command::{SceneCommand, SceneCommandQueue};
 pub use scheduler::Scheduler;
 pub use update::{CameraSystem, RotatorSystem, ScheduledUpdateSystem, UpdateContext, UpdateSystem};
+pub use text_render_system::{TextRenderSystem, TextLayout};

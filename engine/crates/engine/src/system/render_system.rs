@@ -1,7 +1,10 @@
 use anyhow::{Result, anyhow};
 use cgmath::vec3;
 use kani_volcano_math::Transform;
-use renderer_vulkan::{RenderCamera, RenderItem, SkyboxTextureHandle, VulkanRenderer};
+use renderer_vulkan::{
+    RenderCamera, RenderItem, SkyboxTextureHandle, VulkanRenderer,
+    TextRenderItem,
+};
 
 use super::render_command::{RenderCommand, RenderCommandQueue};
 use crate::AssetApi;
@@ -40,6 +43,13 @@ impl<'a> RenderContext<'a> {
         self.world.remove_component::<T>(entity)
     }
 
+    pub fn query1<A>(&self) -> Box<dyn Iterator<Item=(EntityId,&A)> + '_>
+    where 
+        A: Component,
+    {
+        self.world.query1::<A>()
+    }
+
     pub fn query2<A, B>(&self) -> Box<dyn Iterator<Item = (EntityId, &A, &B)> + '_>
     where
         A: Component,
@@ -56,8 +66,31 @@ impl<'a> RenderContext<'a> {
         self.renderer.set_render_items(render_items);
     }
 
+    pub(crate) fn set_text_render_items(&mut self, text_render_items: Vec<TextRenderItem>){
+        self.renderer.set_text_render_items(text_render_items);
+    }
+
     pub(crate) fn set_camera(&mut self, camera: RenderCamera) {
         self.renderer.set_camera(camera);
+    }
+
+    pub(crate) unsafe fn create_text_mesh(
+        &mut self,
+        font: crate::FontAssetId,
+        content: &str,
+        font_size: f32,
+        line_height: f32,
+    ) -> Result<renderer_vulkan::GpuTextMesh> {
+        let handle = self.resources.font_asset(font)
+            .ok_or_else(|| anyhow!("font asset not found: {:?}", font))?.handle;
+        self.renderer.create_text_mesh(handle, content, font_size, line_height)
+    }
+
+    pub(crate) unsafe fn destroy_text_mesh(
+        &mut self,
+        mesh: &mut renderer_vulkan::GpuTextMesh,
+    ) -> Result<()> {
+        self.renderer.destroy_text_mesh(mesh)
     }
 
     pub(crate) unsafe fn destroy_mesh(&mut self, mesh: renderer_vulkan::MeshHandle) -> Result<()> {

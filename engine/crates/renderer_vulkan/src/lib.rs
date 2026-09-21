@@ -56,6 +56,7 @@ use self::sync::{create_render_finished_semaphores, create_sync_objects};
 use self::types::{Mesh, RenderSkybox, VulkanData};
 pub use self::types::{
     MeshHandle, PipelineKey, RenderCamera, RenderItem, SkyboxTextureHandle, TextureHandle,
+    TextRenderItem,
 };
 use self::uniform::{
     create_descriptor_pool, create_global_descriptor_set_layout, create_global_descriptor_sets,
@@ -490,6 +491,10 @@ impl VulkanRenderer {
         self.data.render_objects = render_items;
     }
 
+    pub fn set_text_render_items(&mut self, text_render_items: Vec<TextRenderItem>){
+        self.data.text_render_objects=text_render_items;
+    }
+
     pub fn clear_render_items(&mut self) {
         self.data.render_objects.clear();
     }
@@ -508,6 +513,24 @@ impl VulkanRenderer {
         self.fonts.push(font);
 
         Ok(handle)
+    }
+
+    /// Lay out text, cache its glyphs, and upload its atlas and mesh.
+    pub unsafe fn create_text_mesh(
+        &mut self,
+        font: FontHandle,
+        content: &str,
+        font_size: f32,
+        line_height: f32,
+    ) -> Result<GpuTextMesh> {
+        let font = self.fonts.get(font.0)
+            .ok_or_else(|| anyhow!("font handle not found"))?;
+        let buffer = self.text_system.layout_text(font, content, font_size, line_height)?;
+        let mesh = kani_volcano_text::build_text_mesh(
+            &mut self.text_system, &mut self.glyph_atlas, &buffer,
+        )?;
+        self.upload_text_atlas()?;
+        self.upload_text_mesh(&mesh)
     }
 
     // send atlas map to gpu

@@ -8,6 +8,16 @@ use vulkanalia::prelude::v1_0::*;
 
 type Mat4 = cgmath::Matrix4<f32>;
 
+// Keep handles for every swapchain image, even when a lower index is acquired.
+fn ensure_secondary_command_buffer_images(
+    buffers: &mut Vec<Vec<vk::CommandBuffer>>,
+    image_index: usize,
+) {
+    if buffers.len() <= image_index {
+        buffers.resize_with(image_index + 1, Vec::new);
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct FragmentPushConstants {
@@ -45,6 +55,23 @@ impl TextPushConstants {
 #[cfg(test)]
 mod text_tests {
     use super::*;
+
+    #[test]
+    fn secondary_buffers_survive_repeated_image_index_changes() {
+        let mut buffers = Vec::new();
+        ensure_secondary_command_buffer_images(&mut buffers, 2);
+        for (index, image_buffers) in buffers.iter_mut().enumerate() {
+            image_buffers.resize(index + 1, vk::CommandBuffer::null());
+        }
+        let expected = buffers.clone();
+        for image_index in [0, 1, 2, 0, 2, 1] {
+            ensure_secondary_command_buffer_images(&mut buffers, image_index);
+            assert_eq!(buffers, expected);
+        }
+        ensure_secondary_command_buffer_images(&mut buffers, 3);
+        assert_eq!(&buffers[..3], expected.as_slice());
+        assert!(buffers[3].is_empty());
+    }
 
     #[test]
     fn push_constants_match_text_shader_offsets() {
@@ -250,7 +277,9 @@ unsafe fn text_command_buffer(
 
     // Slot 0 is the skybox; ordinary objects use model_index + 1.
     let slot = renderer.data.render_objects.len() + 1;
-    renderer.data.secondary_command_buffers.resize_with(image_index + 1, Vec::new);
+    ensure_secondary_command_buffer_images(
+        &mut renderer.data.secondary_command_buffers, image_index,
+    );
     let buffers = &mut renderer.data.secondary_command_buffers[image_index];
     while buffers.len() <= slot {
         let allocation = vk::CommandBufferAllocateInfo::builder()
@@ -294,10 +323,9 @@ unsafe fn update_skybox_command_buffer(
     image_index: usize,
     skybox: RenderSkybox,
 ) -> Result<vk::CommandBuffer> {
-    renderer
-        .data
-        .secondary_command_buffers
-        .resize_with(image_index + 1, Vec::new);
+    ensure_secondary_command_buffer_images(
+        &mut renderer.data.secondary_command_buffers, image_index,
+    );
 
     let command_buffer = {
         let command_buffers = &mut renderer.data.secondary_command_buffers[image_index];
@@ -435,12 +463,9 @@ unsafe fn update_secondary_command_buffer(
     image_index: usize,
     model_index: usize,
 ) -> Result<vk::CommandBuffer> {
-    // if secondary_command_buffer (swapchain_images.len())
-    // is smaller than index, add new vec
-    renderer
-        .data
-        .secondary_command_buffers
-        .resize_with(image_index + 1, Vec::new);
+    ensure_secondary_command_buffer_images(
+        &mut renderer.data.secondary_command_buffers, image_index,
+    );
 
     let command_buffer = {
         let command_buffers = &mut renderer.data.secondary_command_buffers[image_index];

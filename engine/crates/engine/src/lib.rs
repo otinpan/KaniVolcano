@@ -38,7 +38,7 @@ pub use system::{
     InputTrigger, KeyBinding, ObjectApi, RenderCommand, RenderCommandApi, RenderCommandQueue,
     RenderSystem, RotatorSystem, SceneCommand, SceneCommandApi, SceneCommandQueue, Scheduler,
     SpawnPrimitiveCommand, SpawnVikingRoomCommand, TimeApi, UpdateContext,
-    UpdatePrimitiveMeshesCommand, UpdateSystem,
+    UpdatePrimitiveMeshesCommand, UpdateSystem, TextRenderSystem, TextLayout,
 };
 pub use time::Time;
 pub use world::World;

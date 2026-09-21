@@ -40,6 +40,7 @@ fn load_assets(app: &mut App) -> Result<()> {
         load_models(app)?;
         load_textures(app)?;
         load_skybox_textures(app)?;
+        load_fonts(app)?;
     }
     Ok(())
 }
@@ -63,6 +64,12 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
         PipelineKey::Lit3D,
         false,
     )?;
+    Ok(())
+}
+
+unsafe fn load_fonts(app: &mut App) -> Result<()>{
+    app.load_font("eng_font", r"C:\Windows\Fonts\arial.ttf")?;
+    app.load_font("jpn_font", r"C:\Windows\Fonts\NotoSansJP-VF.ttf")?;
     Ok(())
 }
 

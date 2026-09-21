@@ -20,7 +20,6 @@ fn main()  -> Result<()>{
 }
 ```
 
-このように使います。
 ## Assets
 モデルやテクスチャをAppからロードすることができます。  
 ### `obj`ファイルのロード
@@ -83,6 +82,16 @@ unsafe{
 
 1. Skyboxに付ける名前
 2. 各面にはる画像
+
+### Font
+フォントをロードすることが出来ます。テキストを描画するときは、事前にロードしたフォントを指定する必要があります。
+```rust
+unsafe fn load_fonts(app: &mut App) -> Result<()>{
+    app.load_font("eng_font", r"C:\Windows\Fonts\arial.ttf")?;
+    app.load_font("jpn_font", r"C:\Windows\Fonts\NotoSansJP-VF.ttf")?;
+    Ok(())
+}
+```
 
 ## Scene
 現段階ではSceneの管理はAppで行います。

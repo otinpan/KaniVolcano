@@ -14,13 +14,15 @@ layout(push_constant) uniform PushConstants {
 } pcs;
 
 void main() {
-    // テキストのローカル座標 → 画面内のピクセル座標
-    vec4 pixelPosition =
-        pcs.transform * vec4(inPosition, 0.0, 1.0);
+    // w = 0: apply rotation and scale, keeping glyph offsets in pixels.
+    vec2 localPixels =
+        (pcs.transform * vec4(inPosition, 0.0, 0.0)).xy;
 
-    // 左上原点。正の高さのVulkan viewportを使う前提
+    // Translation is in NDC: (-1, -1) top-left, (1, 1) bottom-right.
+    // Assumes a Vulkan viewport with positive height.
+    vec2 anchor = pcs.transform[3].xy;
     vec2 ndc =
-        pixelPosition.xy / pcs.viewportSize * 2.0 - 1.0;
+        anchor + localPixels / pcs.viewportSize * 2.0;
 
     gl_Position = vec4(ndc, 0.0, 1.0);
 

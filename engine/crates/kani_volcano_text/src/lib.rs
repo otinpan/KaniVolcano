@@ -5,4 +5,4 @@ mod atlas;
 
 pub use font::{LoadedFont, TextSystem};
 pub use atlas::{GlyphAtlas};
-pub use mesh::{TextBatch, TextMesh, TextVertex};
+pub use mesh::{build_text_mesh, TextBatch, TextMesh, TextVertex};
