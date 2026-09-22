@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use anyhow::Result;
-use renderer_vulkan::{GpuTextMesh, TextRenderItem};
+use renderer_vulkan::{GpuTextMesh, TextRenderItem, PipelineKey};
 use kani_volcano_math::Transform;
-use crate::component::{Text, Visibility};
+use crate::component::{Text, Visibility, TextPipeline};
 
 use crate::{EntityId, FontAssetId};
 use super::RenderContext;
@@ -31,6 +31,7 @@ struct TextSnapshot {
     transform: Transform,
     color: [f32; 4],
     alpha: f32,
+    text_pipeline: TextPipeline,
 }
 
 fn collect_text_entities(context: &RenderContext<'_>) -> HashSet<EntityId> {
@@ -54,6 +55,7 @@ fn collect_renderable_texts(context: &RenderContext<'_>) -> Vec<TextSnapshot> {
             transform: transform.clone(),
             color: [text.color.x, text.color.y, text.color.z, 1.0],
             alpha: text.alpha,
+            text_pipeline: text.text_pipeline,
         })
         .collect()
 }
@@ -80,6 +82,12 @@ impl TextRenderSystem{
                     }
                 }
             }
+
+            let pipeline_key=match text.text_pipeline{
+                TextPipeline::Ui2D => PipelineKey::TextUi2D,
+                TextPipeline::World3D => PipelineKey::Text3D,
+            };
+
             if let Some(cached) = self.cache.get(&text.entity) {
                 for batch in &cached.mesh.batches {
                     items.push(TextRenderItem {
@@ -88,6 +96,7 @@ impl TextRenderSystem{
                         transform: text.transform.clone(),
                         color: text.color,
                         alpha: text.alpha,
+                        pipeline_key,
                     });
                 }
             }

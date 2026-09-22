@@ -7,7 +7,7 @@ use crate::{
     AssetApi, EntityApi, EntityId, Material, MeshAssetId, MeshRenderer, PrimitiveShape, Visibility,
 };
 use crate::{
-    Text,
+    Text, TextPipeline,
 };
 
 
@@ -45,13 +45,15 @@ pub trait ObjectApi: EntityApi + AssetApi {
         Ok(entity)
     }
 
-    fn spawn_text(
+    fn spawn_text_ui2d(
         &mut self,
         font_name: &str,
         text: &str,
         font_size: f32,
         line_height: f32,
-        transform: Transform,
+        position: Vec2,
+        scale: Vec2,
+        rotation: f32,
         color: Vec3,
         alpha: f32,
     ) -> Result<EntityId> {
@@ -79,9 +81,68 @@ pub trait ObjectApi: EntityApi + AssetApi {
             line_height,
             color,
             alpha,
+            text_pipeline: TextPipeline::Ui2D,
         });
+
+        let transform=Transform{
+            position: vec3(position.x, position.y,0.0),
+            rotation: vec3(0.0,0.0,rotation),
+            scale: vec3(scale.x,scale.y,0.0),
+        };
+
         self.add_component(entity, transform);
         self.add_component(entity, Visibility::default());
+
+        Ok(entity)
+    }
+
+    fn spawn_text_3d(
+        &mut self,
+        font_name: &str,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        position: Vec3,
+        scale: Vec3,
+        rotation: Vec3,
+        color: Vec3,
+        alpha: f32,
+    ) -> Result<EntityId>{
+        anyhow::ensure!(
+            font_size.is_finite() && font_size > 0.0,
+            "font size must be finite and positive"
+        );
+        anyhow::ensure!(
+            line_height.is_finite() && line_height > 0.0,
+            "line height must be finite and positive"
+        );
+        anyhow::ensure!(
+            alpha.is_finite() && (0.0..=1.0).contains(&alpha),
+            "alpha must be between 0 and 1"
+        );
+
+        let font=self.font_asset_id(font_name)?;
+
+        let entity=self.spawn();
+
+        self.add_component(entity, Text{
+            content: text.to_string(),
+            font,
+            font_size,
+            line_height,
+            color,
+            alpha,
+            text_pipeline: TextPipeline::World3D,
+        });
+
+        let transform=Transform{
+            position: position,
+            rotation: rotation,
+            scale: scale,
+        };
+
+        self.add_component(entity,transform);
+        self.add_component(entity,Visibility::default());
 
         Ok(entity)
     }

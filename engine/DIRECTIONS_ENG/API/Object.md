@@ -256,33 +256,31 @@ context.spawn_circle_2d(
 
 ## Text Rendering
 
+### 2D
+
 You can render text on the screen.
 
 ```rust
-let hello_world = context.spawn_text(
+let hello_world = context.spawn_text_ui2d(
     "eng_font", // font name
-    "Hello\nWorld", // content
+    "Hello\nWorld", // text
     100.0, // font size
     100.0, // line height
-    Transform {
-        position: vec3(0.0, 0.0, 0.0),
-        scale: vec3(1.0, 2.0, 0.0),
-        ..Default::default()
-    },
+    vec2(0.0, 0.0), // position
+    vec2(1.0, 2.0), // scale
+    0.0, // rotation
     vec3(1.0, 1.0, 0.0), // color
     0.5, // alpha
 );
 
-let ya = context.spawn_text(
+let ya = context.spawn_text_ui2d(
     "jpn_font",
     "やあ",
     100.0,
     100.0,
-    Transform {
-        position: vec3(0.5, 0.5, 0.0),
-        rotation: vec3(45.0, 0.0, 0.0),
-        ..Default::default()
-    },
+    vec2(0.5, 0.5),
+    vec2(1.0, 2.0),
+    0.0,
     vec3(1.0, 0.0, 1.0),
     1.0,
 );
@@ -290,7 +288,7 @@ let ya = context.spawn_text(
 
 ![](../../../assets/tutorial_font.png)
 
-You can also render text by attaching a `Text` component to an entity.
+You can also render text by adding a `Text` component to an entity.
 
 ```rust
 let font = context.font_asset_id("eng_font")?;
@@ -310,7 +308,7 @@ context.add_component(
     hello_world,
     Text {
         content: "Hello\nWorld".to_string(),
-        font,
+        font: font,
         font_size: 100.0,
         line_height: 100.0,
         color: vec3(1.0, 1.0, 0.0),
@@ -318,6 +316,44 @@ context.add_component(
     },
 );
 ```
+
+### 3D
+
+You can render text in 3D space.
+
+```rust
+let hello_world = context.spawn_text_3d(
+    "eng_font", // font name
+    "Hello\nWorld", // text
+    100.0, // font size
+    100.0, // line height
+    vec3(-5.0, 1.0, -1.0), // position
+    vec3(0.01, 0.01, 0.01), // scale (to match world coordinates)
+    vec3(0.0, 0.0, 0.0), // rotation
+    vec3(1.0, 1.0, 1.0), // color
+    0.5, // alpha
+);
+```
+
+![](../../../assets/tutorial_font3d.png)
+
+You can also rotate 3D text.
+
+```rust
+let hello_kani_volcano = context.spawn_text_3d(
+    "eng_font",
+    "Hello\nKaniVolcano",
+    48.0,
+    60.0,
+    vec3(-3.0, 0.0, 0.0),
+    vec3(0.01, 0.01, 0.01),
+    vec3(45.0, 45.0, 0.0),
+    vec3(1.0, 1.0, 1.0),
+    0.5,
+);
+```
+
+![](../../../assets/tutorial_font3d_2.png)
 
 
 ## Reusing Existing Primitive Meshes

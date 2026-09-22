@@ -127,6 +127,7 @@ pub enum PipelineKey {
     Ui2D,
     Skybox,
     TextUi2D,
+    Text3D,
 }
 
 impl PipelineKey {
@@ -139,6 +140,7 @@ impl PipelineKey {
             PipelineKey::Ui2D => VertexLayout::Ui2D,
             PipelineKey::Skybox => VertexLayout::Skybox,
             PipelineKey::TextUi2D => VertexLayout::Ui2D,
+            PipelineKey::Text3D => VertexLayout::Ui2D,
         }
     }
 }
@@ -182,6 +184,7 @@ pub struct TextRenderItem{
     pub transform: Transform,
     pub alpha: f32,
     pub color: [f32;4],
+    pub pipeline_key: PipelineKey,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

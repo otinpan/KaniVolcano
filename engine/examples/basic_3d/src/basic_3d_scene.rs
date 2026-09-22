@@ -440,39 +440,26 @@ impl Basic3dScene {
     }
 
     fn create_texts(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
-        let font=context.font_asset_id("eng_font")?;
-
-        let hello_world=context.spawn();
-        context.add_component(
-            hello_world,
-            Transform {
-                position: vec3(0.0, 0.0, 0.0),
-                scale: vec3(1.0,2.0,0.0),
-                ..Default::default()
-            },
-        );
-        context.add_component(
-            hello_world,
-            Text{
-                content: "Hello\nWorld".to_string(),
-                font: font,
-                font_size: 100.0,
-                line_height: 100.0,
-                color: vec3(1.0,1.0,0.0),
-                alpha: 0.5,
-            }
+        let hello_world=context.spawn_text_3d(
+            "eng_font",
+            "Hello\nWorld",
+            100.0,
+            100.0,
+            vec3(-5.0,1.0,-1.0),
+            vec3(0.01,0.01,0.01),
+            vec3(0.0,0.0,0.0),
+            vec3(1.0,1.0,1.0),
+            0.5,
         );
 
-        let wow=context.spawn_text(
+        let wow=context.spawn_text_ui2d(
             "jpn_font",
             "やあ",
             100.0,
             100.0,
-            Transform{
-                position: vec3(0.5,0.5,0.0),
-                rotation: vec3(45.0,0.0,0.0),
-                ..Default::default()
-            },
+            vec2(0.5,0.5),
+            vec2(1.0,1.0),
+            45.0,
             vec3(1.0,0.0,1.0),
             1.0,
         );

@@ -114,8 +114,8 @@
 
 * ~~固定フレーム~~
 
-* フォント/UI
-cosmic-text + etagere
+* ~~フォント/UI~~
+~~cosmic-text + etagere~~
 * ユーザがHelloを表示指示
 * 未登録のglyphをatlasの1or2ページ追加
 * bufferを作成し、それを基にmeshを作成
@@ -126,61 +126,6 @@ cosmic-text + etagere
 * `image.rs/update_mask_texture_from_pixels()`で更新された1ページをgpuに送信
 * すでに確保されたgpuメモリに上書きされる
 
-フォントの読み込み
-1. ユーザー指定のTTF/OTFファイルを読み込み・解析
-2. Resourcesに登録し、FontAssetIdを返す
-
-テキストの描画準備
-3. 文字列・フォント・サイズから、グリフと配置を決定
-4. 必要なグリフをラスタライズして画像化
-5. グリフ画像をアトラスに詰め込み、キャッシュ
-6. 配置とUVから描画用の頂点・インデックスを生成
-
-GPU描画
-7. アトラス画像と描画データをrenderer_vulkanへ転送
-8. テクスチャを貼った四角形として文字を描画
-- `app.load_font(name,path)`
-- `assets.font_asset_id(name)`
-
-```rust
-app.load_font("font",<font-path>);
-let buffer=text_system.layout_text(
-	&font,
-	"Hello\nWorld",
-	24.0,
-	32.0,
-);
-
-// create mesh and map glyph in atlas
-let text_mesh: TextMesh=build_text_mesh(
-	text_system,
-	glyph_atlas,
-	buffer
-);
-
-// send atlas to gpu
-renderer.upload_text_atlas();
-// send meshes to gpu
-renderer.upload_text_mesh(text_mesh);
-```
-
-* 文字用パイプラインを作る
-	- シェーダー、頂点形式、push constant、アルファブレンディングを設定
-
-* アトラス用ディスクリプタを作る
-	- ページ番号から、そのGPUテクスチャを参照できるようにする
-
-* engine側で描画キャッシュを保持する
-	- EntityId → GpuTextMesh と、再生成を判断するための前回の文字列・フォント・サイズなどを保存
-
-* TextRenderSystem から描画情報を渡す
-	- 初回・変更時にメッシュを準備し、表示対象の各バッチから TextRenderItem を作ってrendererへ渡す
-
-* command.rs で描画命令を記録する
-	- パイプライン・アトラスのディスクリプタ・メッシュ・push constantを指定して draw_indexed を呼ぶ
-
-不要になったメッシュを解放する
-Entity削除、Text の取り外し、メッシュの置き換えに対応します。
 
 
 * 当たり判定

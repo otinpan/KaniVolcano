@@ -27,7 +27,7 @@ pub use pending_primitive_mesh::PendingPrimitiveMesh;
 pub use rotator::Rotator;
 pub use scene_owned::{SceneId, SceneOwned};
 pub use tags::Tags;
-pub use text::Text;
+pub use text::{Text,TextPipeline};
 pub use visibility::Visibility;
 
 // Component does not have short reference like &'a str, &String

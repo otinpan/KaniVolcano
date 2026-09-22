@@ -439,32 +439,29 @@ fn create_2d_primitives(&mut self, context: &mut SceneContext<'_>) -> Result<()>
 
 
 ## テキストの描画
+### 2D
 画面上にテキストを描画することが出来ます。
 ```rust
-let hello_world=context.spawn_text(
+let hello_world=context.spawn_text_ui2d(
     "eng_font", // font name
-    "Hello\nWorld", // content
+    "Hello\nWorld", // text
     100.0, // font size
     100.0, // line height
-    Transform {
-        position: vec3(0.0, 0.0, 0.0),
-        scale: vec3(1.0,2.0,0.0),
-        ..Default::default()
-    },
+    vec2(0.0,0.0), // position
+    vec2(1.0,2.0), // scale
+    0.0, // rotation
     vec3(1.0,1.0,0.0), // color
     0.5, // alpha
 );
 
-let ya=context.spawn_text(
+let ya=context.spawn_text_ui2d(
     "jpn_font",
     "やあ",
     100.0,
     100.0,
-    Transform{
-        position: vec3(0.5,0.5,0.0),
-        rotation: vec3(45.0,0.0,0.0),
-        ..Default::default()
-    },
+    vec2(0.5,0.5),
+    vec2(1.0,2.0),
+    0.0,
     vec3(1.0,0.0,1.0),
     1.0,
 );
@@ -497,6 +494,40 @@ context.add_component(
     }
 );
 ```
+
+### 3D
+3次元空間上にテキストを描画することが出来ます。
+```rust
+let hello_world=context.spawn_text_3d(
+    "eng_font", // font name
+    "Hello\nWorld", // text
+    100.0, // font size
+    100.0, // line height
+    vec3(-5.0,1.0,-1.0), // position
+    vec3(0.01,0.01,0.01), // scale (to match world coordinate)
+    vec3(0.0,0.0,0.0), // rotation
+    vec3(1.0,1.0,1.0), // color
+    0.5, // alpha
+);
+```
+
+![](../../../assets/tutorial_font3d.png)
+
+```rust
+let hello_kani_volcanoe=context.spawn_text_3d(
+    "eng_font",
+    "Hello\nKaniVolcano",
+    48.0,
+    60.0,
+    vec3(-3.0,0.0,0.0),
+    vec3(0.01,0.01,0.01),
+    vec3(45.0,45.0,0.0),
+    vec3(1.0,1.0,1.0),
+    0.5,
+);
+```
+
+![](../../../assets/tutorial_font3d_2.png)
 
 ## MeshAssetIdを指定して描画
 `spawn_primitive_from_mesh()`は`MeshAssetId`を指定し、すでに生成されたMeshを使って基本図形を複製することができます。

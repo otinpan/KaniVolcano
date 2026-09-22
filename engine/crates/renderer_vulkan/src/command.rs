@@ -85,6 +85,7 @@ mod text_tests {
     #[test]
     fn push_constants_preserve_transform_and_combine_opacity() {
         let item = super::super::types::TextRenderItem {
+            pipeline_key: PipelineKey::TextUi2D,
             mesh: super::super::types::MeshHandle::new(0, VertexLayout::Ui2D),
             atlas_page: 0,
             transform: kani_volcano_math::Transform {
@@ -223,16 +224,30 @@ pub unsafe fn update_command_buffer(
         }
     }
 
+    for item in &renderer.data.text_render_objects {
+        anyhow::ensure!(matches!(item.pipeline_key, PipelineKey::TextUi2D | PipelineKey::Text3D),
+            "unsupported text pipeline: {:?}", item.pipeline_key);
+    }
     let visible_indices = sorted_render_indices(&renderer.data);
+    let (ui_indices, world_indices): (Vec<_>, Vec<_>) = visible_indices.into_iter()
+        .partition(|&i| renderer.data.render_objects[i].pipeline_key == PipelineKey::Ui2D);
     secondary_command_buffers.extend(
-        visible_indices
+        world_indices
             .into_iter()
             .map(|i| update_secondary_command_buffer(renderer, image_index, i))
             .collect::<Result<Vec<_>, _>>()?,
     );
 
-    if !renderer.data.text_render_objects.is_empty() {
-        secondary_command_buffers.push(text_command_buffer(renderer, image_index)?);
+    if renderer.data.text_render_objects.iter().any(|item| item.pipeline_key == PipelineKey::Text3D) {
+        secondary_command_buffers.push(text_command_buffer(renderer, image_index, PipelineKey::Text3D)?);
+    }
+    secondary_command_buffers.extend(
+        ui_indices.into_iter()
+            .map(|i| update_secondary_command_buffer(renderer, image_index, i))
+            .collect::<Result<Vec<_>>>()?,
+    );
+    if renderer.data.text_render_objects.iter().any(|item| item.pipeline_key == PipelineKey::TextUi2D) {
+        secondary_command_buffers.push(text_command_buffer(renderer, image_index, PipelineKey::TextUi2D)?);
     }
 
     if !secondary_command_buffers.is_empty() {
@@ -247,20 +262,29 @@ pub unsafe fn update_command_buffer(
     Ok(())
 }
 
-// Record UI text after ordinary render items, preserving text batch order.
+// Record one text pipeline, preserving batch order within that group.
 unsafe fn text_command_buffer(
     renderer: &mut VulkanRenderer,
     image_index: usize,
+    pipeline_key: PipelineKey,
 ) -> Result<vk::CommandBuffer> {
     let extent = renderer.data.swapchain_extent;
     anyhow::ensure!(extent.width > 0 && extent.height > 0, "text viewport is empty");
     let pipeline = renderer.data.pipelines.iter()
-        .find(|pipeline| pipeline.key == PipelineKey::TextUi2D)
+        .find(|pipeline| pipeline.key == pipeline_key)
         .copied()
-        .ok_or_else(|| anyhow!("TextUi2D pipeline not found"))?;
+        .ok_or_else(|| anyhow!("text pipeline not found: {:?}", pipeline_key))?;
+    let world_text = pipeline_key == PipelineKey::Text3D;
+    let camera_set = if world_text {
+        Some(*renderer.data.global_descriptor_sets.get(image_index)
+            .ok_or_else(|| anyhow!("text camera descriptor not found: {}", image_index))?)
+    } else {
+        None
+    };
 
     // Resolve resources before beginning the secondary command buffer.
-    let draws = renderer.data.text_render_objects.iter().map(|item| {
+    let draws = renderer.data.text_render_objects.iter()
+        .filter(|item| item.pipeline_key == pipeline_key).map(|item| {
         let mesh = renderer.data.meshes.get(item.mesh.index)
             .and_then(|slot| slot.as_ref())
             .ok_or_else(|| anyhow!("text mesh not found: {}", item.mesh.index))?;
@@ -276,7 +300,8 @@ unsafe fn text_command_buffer(
     }).collect::<Result<Vec<_>>>()?;
 
     // Slot 0 is the skybox; ordinary objects use model_index + 1.
-    let slot = renderer.data.render_objects.len() + 1;
+    // Separate slots prevent the UI recording from overwriting the 3D recording.
+    let slot = renderer.data.render_objects.len() + if world_text { 1 } else { 2 };
     ensure_secondary_command_buffer_images(
         &mut renderer.data.secondary_command_buffers, image_index,
     );
@@ -302,13 +327,34 @@ unsafe fn text_command_buffer(
         vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
 
     for (vertex_buffer, index_buffer, index_count, descriptor, constants) in draws {
-        renderer.device.cmd_bind_descriptor_sets(command_buffer,
-            vk::PipelineBindPoint::GRAPHICS, pipeline.layout, 0, &[descriptor], &[]);
-        renderer.device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer], &[0]);
-        renderer.device.cmd_bind_index_buffer(command_buffer, index_buffer, 0, vk::IndexType::UINT32);
+        let descriptors = match camera_set {
+            Some(camera) => vec![camera, descriptor],
+            None => vec![descriptor],
+        };
+        renderer.device.cmd_bind_descriptor_sets(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.layout,
+            0,
+            &descriptors,
+            &[]
+        );
+        renderer.device.cmd_bind_vertex_buffers(
+            command_buffer,
+            0,
+            &[vertex_buffer],
+            &[0]
+        );
+        renderer.device.cmd_bind_index_buffer(
+            command_buffer,
+            index_buffer,
+            0,
+            vk::IndexType::UINT32
+        );
         let bytes = std::slice::from_raw_parts(
             &constants as *const TextPushConstants as *const u8,
-            std::mem::size_of::<TextPushConstants>(),
+            // Text3D shares the matrix/color prefix, without viewport or padding.
+            if world_text { 80 } else { std::mem::size_of::<TextPushConstants>() },
         );
         renderer.device.cmd_push_constants(command_buffer, pipeline.layout,
             vk::ShaderStageFlags::VERTEX, 0, bytes);
@@ -710,7 +756,7 @@ unsafe fn update_secondary_command_buffer(
                 material_bytes,
             );
         }
-        PipelineKey::TextUi2D =>{
+        PipelineKey::TextUi2D | PipelineKey::Text3D =>{
             renderer.device.end_command_buffer(command_buffer)?;
             return Ok(command_buffer);
         }

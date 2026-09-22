@@ -22,7 +22,7 @@ mod world;
 pub use app::App;
 pub use component::{
     Camera, CameraComponent, Component, Material, MeshRenderer, Name, PendingPrimitiveMesh,
-    Rotator, SceneId, SceneOwned, Tags, Visibility, Text,
+    Rotator, SceneId, SceneOwned, Tags, Visibility, Text, TextPipeline,
 };
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
@@ -49,7 +49,7 @@ pub mod prelude {
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
-        UpdateContext, UpdateSystem, Visibility, run, Text,
+        UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline,
     };
 
     pub use kani_volcano_math::Transform;

@@ -45,17 +45,28 @@ Users can use font in ver0.2.0
 app.load_font("eng_font", r"C:\Windows\Fonts\arial.ttf")?;
 ```
 ```rust
-let hello_world=context.spawn_text(
-    "eng_font",
-    "Hello\nWorld",
-    100.0,
-    100.0,
-    Transform{
-        position: vec3(0.5,0.5,0.0),
-        rotation: vec3(45.0,0.0,0.0),
-        ..Default::default()
-    },
-    vec3(1.0,0.0,1.0),
-    1.0,
+let hello_world=context.spawn_text_ui2d(
+    "eng_font", // font name
+    "Hello\nWorld", // text
+    100.0, // font size
+    100.0, // line height
+    vec2(0.0,0.0), // position
+    vec2(1.0,2.0), // scale
+    0.0, // rotation
+    vec3(1.0,1.0,0.0), // color
+    0.5, // alpha
+);
+```
+```rust
+let hello_world=context.spawn_text_3d(
+    "eng_font", // font name
+    "Hello\nWorld", // text
+    100.0, // font size
+    100.0, // line height
+    vec3(-5.0,1.0,-1.0), // position
+    vec3(0.01,0.01,0.01), // scale (to match world coordinate)
+    vec3(0.0,0.0,0.0), // rotation
+    vec3(1.0,1.0,1.0), // color
+    0.5, // alpha
 );
 ```
