@@ -15,6 +15,8 @@ mod scene_command;
 mod scheduler;
 mod update;
 mod text_render_system;
+mod asset_load_system;
+mod asset_load_command;
 
 pub use api::{
     AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi,

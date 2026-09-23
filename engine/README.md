@@ -126,26 +126,46 @@
 * `image.rs/update_mask_texture_from_pixels()`で更新された1ページをgpuに送信
 * すでに確保されたgpuメモリに上書きされる
 
-
-
+* 非同期ロード
+	- model, font, sound
+	- system/asset_load_system.rs: schedulerから呼ばれる処理を非同期、別スレッドで -> Resourcesでまとめて登録
+	- system/asset_load_command.rs: コマンドを定義
+	- api/asset_load_api.rs: Contextからのロード要求・状態確認
+* サウンド機能
+	- 音声アセットの登録
+	- 個別に再生・停止・音量調整・同時再生
+	- ループ・一時停止
+	- PCMストリーム入力
+* 共通スレッドプール
+* セーブ・ファイル機能
+	- ユーザ定義データの保存、復元
+* デバッグ機能
+	- フレーム計測
+	- ゲーム内メニューでログ表示
+	- ゲームの一時停止(カメラ操作可能)
+	- シングルステップ実行
+	- スローモーション
+	- プロファイリング
+	- Entity数
+	- GPUリソース表示
+* UI操作
+	- ボタン
+	- クリック判定
+	- フォーカス
+	- メニュー作成
+* ShaderApi
+	- shader作成
+	- pipelineを指定し、shaderの引数を制限
 * 当たり判定
   - BoxCollider
   - SphereCollider
   - intersects
   - query_collisions
-
-* セーブ機能
-
 * 簡易物理
   - Velocity
   - Gravity
   - KinematicBody
   - move_and_slide / move_and_collide
-
-
-* ShaderApi
-	- shader作成
-	- pipelineを指定し、shaderの引数を制限
 
 ## ユーザ触れられるもの
 * App
