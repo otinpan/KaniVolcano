@@ -1,7 +1,3 @@
-use anyhow::{Result};
-use std::collections::VecDeque;
-use std::path::PathBuf;
-
 use renderer_vulkan::{PipelineKey};
 #[derive(Debug)]
 pub enum AssetLoadCommand{
@@ -32,6 +28,14 @@ pub struct AssetLoadCommandQueue{
 }
 
 impl AssetLoadCommandQueue{
+    pub(crate) fn drain(&mut self) -> impl Iterator<Item=AssetLoadCommand> + '_{
+        self.commands.drain(..)
+    }
+
+    pub fn is_empty(&self) -> bool{
+        self.commands.is_empty()
+    }
+
     pub fn request_load_model(
         &mut self,
         name: &str,

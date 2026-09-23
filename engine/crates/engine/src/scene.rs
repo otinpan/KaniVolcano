@@ -3,7 +3,7 @@ use crate::component::Visibility;
 use crate::primitive::{PrimitiveShape, spawn_primitive_from_mesh};
 use crate::system::{
     AssetApi, Command, EntityApi, InputTrigger, ObjectApi, RenderCommandApi, UpdateContext,
-    UpdateSystem,
+    UpdateSystem, AssetLoadApi, AssetLoadCommandQueue,
 };
 use crate::{
     EntityId, Input, Material, MeshAssetId, PendingPrimitiveMesh, RenderCommandQueue, Resources,
@@ -237,6 +237,12 @@ impl ObjectApi for SceneContext<'_> {
 impl RenderCommandApi for SceneContext<'_> {
     fn render_commands_mut(&mut self) -> &mut RenderCommandQueue {
         &mut self.scheduler.render_commands
+    }
+}
+
+impl AssetLoadApi for SceneContext<'_>{
+    fn asset_load_commands_mut(&mut self) -> &mut AssetLoadCommandQueue{
+        &mut self.scheduler.asset_load_commands
     }
 }
 

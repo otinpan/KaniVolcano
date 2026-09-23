@@ -125,6 +125,7 @@ It provides:
 - Time API
 - RenderCommand API
 - SceneCommand API
+- AssetLoad API
 
 Use it for per-frame logic such as movement, animation, input checks, and mesh updates.
 
@@ -140,7 +141,9 @@ It provides:
 - Input API
 - RenderCommand API
 - SceneCommand API
+- AssetLoad API
 
 Use it for actions triggered by input, such as spawning or despawning objects.
 
 Entities spawned from `CommandContext` are not automatically marked as scene-owned. If they should be removed when the scene exits, add `SceneOwned` manually.
+

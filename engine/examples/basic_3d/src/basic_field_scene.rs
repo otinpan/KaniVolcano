@@ -106,7 +106,17 @@ impl BasicFieldScene {
             ChangeSceneCommand {
                 next_scene: "Basic3dScene".to_string(),
             },
-        )
+        );
+        context.bind_input_command(
+            KeyCode::Digit0,
+            InputTrigger::Pressed,
+            LoadAssetsCommand,
+        );
+        context.bind_input_command(
+            KeyCode::Enter,
+            InputTrigger::Pressed,
+            SpawnTransparentVikingRoom,
+        );
     }
 }
 
@@ -127,6 +137,54 @@ impl Command for ChangeSceneCommand {
 
     fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
         context.set_current_scene(self.next_scene.as_str());
+        Ok(())
+    }
+}
+
+pub struct LoadAssetsCommand;
+
+impl Command for LoadAssetsCommand{
+    fn id(&self) -> String{
+        format!("load_assets")
+    }
+
+    fn execute(&self, context: &mut CommandContext<'_>) -> Result<()>{
+        context.request_load_texture("jupiter","assets/textures/jupiter.png");
+        context.request_load_model(
+            "viking_room_lit3d",
+            "assets/models/viking_room.obj",
+            PipelineKey::Lit3D,
+            true,
+        );
+
+        Ok(())
+    }
+}
+
+pub struct SpawnTransparentVikingRoom;
+
+impl Command for SpawnTransparentVikingRoom{
+    fn id(&self) -> String{
+        format!("spawn_transparent_viking_room")
+    }
+
+    fn execute(&self, context: &mut CommandContext) -> Result<()>{
+        let jupiter=context.texture("jupiter")?;
+        context.spawn_model(
+            "viking_room_lit3d",
+            Transform { 
+                position: vec3(0.0,0.0,3.0), 
+                rotation: vec3(0.0,45.0,0.0),
+                scale: vec3(1.0,1.0,1.0)
+            },
+            Material { 
+                color: vec3(1.0,1.0,1.0), 
+                alpha: 0.5, 
+                use_texture: true, 
+                texture: jupiter,
+                pipeline_key: PipelineKey::Lit3D
+            }
+        )?;
         Ok(())
     }
 }

@@ -26,10 +26,10 @@ use cgmath::Vector3;
 use crate::app::DEFAULT_TEXTURE;
 use crate::component::{Material, PendingPrimitiveMesh, Visibility};
 use crate::primitive::spawn_primitive_from_mesh;
-use crate::{AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi};
+use crate::{AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, AssetLoadApi};
 use crate::{
     CommandQueue, EntityId, Input, MeshAssetId, PrimitiveShape, RenderCommandQueue, Resources,
-    SceneCommandQueue, World,
+    SceneCommandQueue, World, AssetLoadCommandQueue,
 };
 use kani_volcano_math::Transform;
 use renderer_vulkan::PipelineKey;
@@ -43,6 +43,7 @@ pub struct CommandContext<'a> {
     input: &'a Input,
     resources: &'a mut Resources,
     render_commands: &'a mut RenderCommandQueue,
+    asset_load_commands: &'a mut AssetLoadCommandQueue,
     scene_commands: &'a mut SceneCommandQueue,
 }
 
@@ -53,6 +54,7 @@ impl<'a> CommandContext<'a> {
         input: &'a Input,
         resources: &'a mut Resources,
         render_commands: &'a mut RenderCommandQueue,
+        asset_load_commands: &'a mut AssetLoadCommandQueue,
         scene_commands: &'a mut SceneCommandQueue,
     ) -> Self {
         Self {
@@ -61,6 +63,7 @@ impl<'a> CommandContext<'a> {
             input,
             resources,
             render_commands,
+            asset_load_commands,
             scene_commands,
         }
     }
@@ -192,6 +195,12 @@ impl RenderCommandApi for CommandContext<'_> {
 impl SceneCommandApi for CommandContext<'_> {
     fn scene_commands_mut(&mut self) -> &mut SceneCommandQueue {
         &mut self.scene_commands
+    }
+}
+
+impl AssetLoadApi for CommandContext<'_>{
+    fn asset_load_commands_mut(&mut self) -> &mut AssetLoadCommandQueue{
+        &mut self.asset_load_commands
     }
 }
 

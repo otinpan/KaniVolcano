@@ -6,7 +6,6 @@ use renderer_vulkan::{
     FontHandle,
 };
 use std::collections::HashMap;
-use kani_volcano_text::{TextSystem};
 
 pub type Vec3 = Vector3<f32>;
 

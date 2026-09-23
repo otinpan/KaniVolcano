@@ -120,7 +120,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "basic_3d"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "kani-volcano-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -793,14 +793,14 @@ dependencies = [
 
 [[package]]
 name = "kani-volcano-math"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cgmath",
 ]
 
 [[package]]
 name = "kani-volcano-text"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "cosmic-text",
@@ -1223,7 +1223,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "renderer_vulkan"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "cgmath",

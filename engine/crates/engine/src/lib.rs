@@ -33,19 +33,20 @@ pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
 pub use scene_manager::SceneManager;
 pub use system::{
-    AssetApi, CameraSystem, Command, CommandContext, CommandQueue, CommandRef, CommandSystem,
+    AssetApi, AssetLoadApi, CameraSystem, Command, CommandContext, CommandQueue, CommandRef, CommandSystem,
     CreatePrimitiveCommand, DebugMonitor, DespawnLastCommand, EntityApi, InputApi, InputSystem,
     InputTrigger, KeyBinding, ObjectApi, RenderCommand, RenderCommandApi, RenderCommandQueue,
     RenderSystem, RotatorSystem, SceneCommand, SceneCommandApi, SceneCommandQueue, Scheduler,
     SpawnPrimitiveCommand, SpawnVikingRoomCommand, TimeApi, UpdateContext,
     UpdatePrimitiveMeshesCommand, UpdateSystem, TextRenderSystem, TextLayout,
+    AssetLoadCommand, AssetLoadCommandQueue, AssetLoadSystem, AssetLoadOutcome, AssetKind,
 };
 pub use time::Time;
 pub use world::World;
 
 pub mod prelude {
     pub use crate::{
-        App, AssetApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
+        App, AssetApi, AssetLoadApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,

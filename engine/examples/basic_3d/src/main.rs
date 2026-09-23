@@ -58,12 +58,12 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
         PipelineKey::DebugLine3D,
         false,
     )?;
-    app.load_model(
+    /*app.load_model(
         "viking_room_lit3d",
         "assets/models/viking_room.obj",
         PipelineKey::Lit3D,
         false,
-    )?;
+    )?;*/
     Ok(())
 }
 

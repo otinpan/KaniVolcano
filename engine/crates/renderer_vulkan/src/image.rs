@@ -9,12 +9,26 @@ use super::buffer::{begin_single_time_commands, create_buffer, end_single_time_c
 use super::types::{Texture, VulkanData};
 
 // texture //////////////////////////////////////////
+#[derive(Debug)]
+pub struct DecodedTexture {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub unsafe fn create_texture(
     instance: &Instance,
     device: &Device,
     data: &mut VulkanData,
     path: &str,
 ) -> Result<Texture> {
+    let image = decode_texture(path)?;
+    create_texture_from_pixels(instance, device, data, &image.pixels, image.width, image.height)
+}
+
+
+// read file and convert texture to pixels
+pub fn decode_texture(path: &str) -> Result<DecodedTexture> {
     let image = File::open(path)?;
 
     let decoder = png::Decoder::new(image);
@@ -41,7 +55,7 @@ pub unsafe fn create_texture(
 
     let (width, height) = reader.info().size();
 
-    create_texture_from_pixels(instance, device, data, &pixels, width, height)
+    Ok(DecodedTexture { pixels, width, height })
 }
 
 pub unsafe fn create_skybox_texture(
@@ -50,6 +64,11 @@ pub unsafe fn create_skybox_texture(
     data: &mut VulkanData,
     paths: [&str; 6],
 ) -> Result<Texture> {
+    let image = decode_skybox_texture(paths)?;
+    create_cubemap_texture_from_pixels(instance, device, data, &image.pixels, image.width, image.height)
+}
+
+pub fn decode_skybox_texture(paths: [&str; 6]) -> Result<DecodedTexture> {
     let mut pixels = Vec::new();
     let mut width = 0;
     let mut height = 0;
@@ -106,7 +125,7 @@ pub unsafe fn create_skybox_texture(
         pixels.extend_from_slice(&face_pixels);
     }
 
-    create_cubemap_texture_from_pixels(instance, device, data, &pixels, width, height)
+    Ok(DecodedTexture { pixels, width, height })
 }
 
 pub unsafe fn create_white_texture(
@@ -412,7 +431,7 @@ pub unsafe fn update_mask_texture_from_pixels(
 }
 
 
-unsafe fn create_cubemap_texture_from_pixels(
+pub(crate) unsafe fn create_cubemap_texture_from_pixels(
     instance: &Instance,
     device: &Device,
     data: &mut VulkanData,

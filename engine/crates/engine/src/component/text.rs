@@ -1,4 +1,4 @@
-use crate::{Component, PipelineKey, FontAssetId};
+use crate::{Component, FontAssetId};
 use cgmath::Vector3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

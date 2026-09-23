@@ -19,7 +19,7 @@ mod asset_load_system;
 mod asset_load_command;
 
 pub use api::{
-    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi,
+    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi,
 };
 pub use command::{
     Command, CommandContext, CommandSystem, CreatePrimitiveCommand, DebugMonitor,
@@ -33,3 +33,5 @@ pub use scene_command::{SceneCommand, SceneCommandQueue};
 pub use scheduler::Scheduler;
 pub use update::{CameraSystem, RotatorSystem, ScheduledUpdateSystem, UpdateContext, UpdateSystem};
 pub use text_render_system::{TextRenderSystem, TextLayout};
+pub use asset_load_system::{AssetLoadSystem, AssetLoadOutcome, AssetKind};
+pub use asset_load_command::{AssetLoadCommand, AssetLoadCommandQueue};

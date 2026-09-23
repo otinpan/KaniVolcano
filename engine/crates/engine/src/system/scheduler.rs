@@ -3,7 +3,7 @@ use anyhow::Result;
 use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
-    UpdateSystem, TextRenderSystem,
+    UpdateSystem, TextRenderSystem, AssetLoadSystem, AssetLoadCommandQueue, AssetLoadOutcome,
 };
 
 use crate::{Input, Resources, SceneCommandQueue, Time, World};
@@ -17,7 +17,9 @@ pub struct Scheduler {
     pub input_system: InputSystem,
     pub render_system: RenderSystem,
     pub text_render_system: TextRenderSystem,
+    pub asset_load_system: Option<AssetLoadSystem>,
     pub render_commands: RenderCommandQueue,
+    pub asset_load_commands: AssetLoadCommandQueue,
     update_systems: Vec<ScheduledUpdateSystem>,
     fixed_update_systems: Vec<ScheduledUpdateSystem>,
 }
@@ -35,7 +37,9 @@ impl Scheduler {
         input_system: InputSystem,
         render_system: RenderSystem,
         text_render_system: TextRenderSystem,
+        asset_load_system: Option<AssetLoadSystem>,
         render_commands: RenderCommandQueue,
+        asset_load_commands: AssetLoadCommandQueue,
         update_systems: Vec<ScheduledUpdateSystem>,
         fixed_update_systems: Vec<ScheduledUpdateSystem>,
     ) -> Self {
@@ -44,7 +48,9 @@ impl Scheduler {
             input_system,
             render_system,
             text_render_system,
+            asset_load_system,
             render_commands,
+            asset_load_commands,
             update_systems,
             fixed_update_systems,
         }
@@ -118,6 +124,7 @@ impl Scheduler {
             input,
             resources,
             &mut self.render_commands,
+            &mut self.asset_load_commands,
             scene_commands,
         );
 
@@ -138,6 +145,7 @@ impl Scheduler {
             time,
             resources,
             &mut self.render_commands,
+            &mut self.asset_load_commands,
             scene_commands,
         );
 
@@ -163,6 +171,7 @@ impl Scheduler {
             time,
             resources,
             &mut self.render_commands,
+            &mut self.asset_load_commands,
             scene_commands,
         );
 
@@ -172,6 +181,40 @@ impl Scheduler {
             }
         }
         Ok(())
+    }
+
+    pub fn load_asset_stage(
+        &mut self,
+    ) -> Result<()>{
+        if self.asset_load_commands.is_empty(){
+            return Ok(())
+        }
+
+        if self.asset_load_system.is_none(){
+            self.asset_load_system=Some(AssetLoadSystem::new()?);
+        }
+
+        if let Some(system) = &mut self.asset_load_system{
+            system.load_asset_stage(&mut self.asset_load_commands)?;
+        }
+
+        Ok(())
+    }
+
+    pub unsafe fn register_asset_stage(
+        &mut self,
+        renderer: &mut VulkanRenderer,
+        resources: &mut Resources,
+    ) -> Result<Vec<AssetLoadOutcome>>{
+        match &mut self.asset_load_system{
+            Some(system) => unsafe{
+                system.register_asset_stage(
+                    renderer,
+                    resources,
+                )
+            },
+            None => Ok(Vec::new()),
+        }
     }
 
     pub fn run_render_stage(
@@ -188,6 +231,7 @@ impl Scheduler {
         Ok(())
     }
 
+
 }
 
 impl Default for Scheduler {
@@ -197,7 +241,9 @@ impl Default for Scheduler {
             input_system: InputSystem::new(),
             render_system: RenderSystem,
             text_render_system: TextRenderSystem::default(),
+            asset_load_system: None,
             render_commands: RenderCommandQueue::default(),
+            asset_load_commands: AssetLoadCommandQueue::default(),
             update_systems: Vec::new(),
             fixed_update_systems: Vec::new(),
         }

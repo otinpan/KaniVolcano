@@ -70,3 +70,14 @@ let hello_world=context.spawn_text_3d(
     0.5, // alpha
 );
 ```
+
+## ver0.2.1
+Complete `LoadAssetApi` which load assets using worker thread.
+```rust
+context.request_load_model(
+    "viking_room_lit3d",
+    "assets/models/viking_room.obj",
+    PipelineKey::Lit3D,
+    true,
+);
+```

@@ -1,4 +1,4 @@
-use anyhow::{Result, Context, anyhow, ensure};
+use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
@@ -92,6 +92,26 @@ impl App {
         self.time.update();
         let delta_time = self.time.delta_seconds();
 
+
+        // register assets in resources and renderer in main thread
+        let outcomes=unsafe{
+            self.scheduler.register_asset_stage(
+                &mut self.renderer,
+                &mut self.resources,
+            )?
+        };
+
+        for outcome in outcomes{
+            if let Err(error) = outcome.result{
+                log::error!(
+                    "asset load failed: {:?} '{}': {:#}",
+                    outcome.kind,
+                    outcome.name,
+                    error,
+                );
+            }
+        }
+
         let mut commands = self.scheduler.run_input_stage(&self.input);
 
         self.scheduler.run_command_stage(
@@ -126,6 +146,7 @@ impl App {
                 &self.time,
                 &mut self.resources,
                 &mut self.scheduler.render_commands,
+                &mut self.scheduler.asset_load_commands,
                 &mut self.scene_commands,
             );
             self.scene_manager.update_current_scene(&mut context)?;
@@ -140,6 +161,9 @@ impl App {
         )?;
 
         self.apply_scene_commands()?;
+
+        // load asset (read file, create pixels) in worker thread (maximum 4)
+        self.scheduler.load_asset_stage()?;
 
         self.scheduler.run_render_stage(
             &mut self.world,

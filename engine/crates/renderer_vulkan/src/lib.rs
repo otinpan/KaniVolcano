@@ -45,7 +45,8 @@ use self::image::{
 };
 use self::instance::{VALIDATION_ENABLED, create_entry, create_instance};
 use self::mesh::create_mesh;
-use self::model::{MeshData, load_model_source};
+pub use self::model::{MeshData, load_model_source};
+pub use self::image::{DecodedTexture, decode_texture, decode_skybox_texture};
 pub use self::model::{SourceMesh, SourceTopology};
 use self::pipeline::{
     create_debug_line_pipeline, create_lit3d_pipeline, create_mesh3d_pipeline, create_render_pass,
@@ -66,11 +67,18 @@ use self::uniform::{
     create_skybox_descriptor_set_layout, create_skybox_descriptor_sets, create_uniform_buffers,
     update_light_uniform_buffer, update_uniform_buffer,
 };
-pub use self::vertex::{DebugLineVertex, Mesh3DVertex, SourceVertex, VertexLayout};
+pub use self::vertex::{DebugLineVertex, Lit3DVertex, Mesh3DVertex, SourceVertex, VertexLayout};
 use self::text::{GpuGlyphAtlas};
 pub use self::text::{GpuTextBatch, GpuTextMesh};
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
+fn validate_decoded_texture(image: &DecodedTexture, layers: usize) -> Result<()> {
+    let expected = (image.width as usize).checked_mul(image.height as usize)
+        .and_then(|n| n.checked_mul(4)).and_then(|n| n.checked_mul(layers));
+    anyhow::ensure!(image.width > 0 && image.height > 0 && expected == Some(image.pixels.len()),
+        "invalid RGBA texture dimensions or pixel count");
+    Ok(())
+}
 type Mat4 = Matrix4<f32>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -259,7 +267,14 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn load_texture(&mut self, path: &str) -> Result<TextureHandle> {
-        let texture = create_texture(&self.instance, &self.device, &mut self.data, path)?;
+        self.upload_decoded_texture(&decode_texture(path)?)
+    }
+
+    // create gpu texture from pixels and register it to vulkan_renderer
+    pub unsafe fn upload_decoded_texture(&mut self, image: &DecodedTexture) -> Result<TextureHandle> {
+        validate_decoded_texture(image, 1)?;
+        let texture = image::create_texture_from_pixels(&self.instance, &self.device, &mut self.data,
+            &image.pixels, image.width, image.height)?;
         let index = self.data.textures.len();
         self.data.textures.push(texture);
 
@@ -282,12 +297,20 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn load_skybox_texture(&mut self, paths: [&str; 6]) -> Result<SkyboxTextureHandle> {
-        let texture = create_skybox_texture(&self.instance, &self.device, &mut self.data, paths)?;
+        self.upload_decoded_skybox_texture(&decode_skybox_texture(paths)?)
+    }
+
+    pub unsafe fn upload_decoded_skybox_texture(&mut self, image: &DecodedTexture) -> Result<SkyboxTextureHandle> {
+        validate_decoded_texture(image, 6)?;
+        anyhow::ensure!(image.width == image.height, "skybox faces must be square");
+        let texture = image::create_cubemap_texture_from_pixels(&self.instance, &self.device, &mut self.data,
+            &image.pixels, image.width, image.height)?;
 
         let index = self.data.skybox_textures.len();
         self.data.skybox_textures.push(texture);
 
         if !self.data.descriptor_pool.is_null() && !self.data.uniform_buffers.is_empty() {
+            self.device.device_wait_idle()?;
             self.device
                 .destroy_descriptor_pool(self.data.descriptor_pool, None);
 
