@@ -1,0 +1,8 @@
+[package]
+name = "kani-volcano-audio"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace=true
+kira = "0.12.4"

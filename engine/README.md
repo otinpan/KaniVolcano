@@ -126,16 +126,44 @@
 * `image.rs/update_mask_texture_from_pixels()`で更新された1ページをgpuに送信
 * すでに確保されたgpuメモリに上書きされる
 
-* 非同期ロード
+* ~~非同期ロード~~
 	- model, font, sound
 	- system/asset_load_system.rs: schedulerから呼ばれる処理を非同期、別スレッドで -> Resourcesでまとめて登録
 	- system/asset_load_command.rs: コマンドを定義
 	- api/asset_load_api.rs: Contextからのロード要求・状態確認
 * サウンド機能
-	- 音声アセットの登録
-	- 個別に再生・停止・音量調整・同時再生
-	- ループ・一時停止
-	- PCMストリーム入力
+1. 音声出力とアセット管理- 音声バックエンドの初期化・終了
+- 音声ファイルの読み込み・登録、AudioAssetId
+- 非同期ロードとの接続
+
+2. 基本的な再生制御- BGM・効果音の再生、停止、一時停止、再開
+- 音量、ループ
+- 再生単位の PlaybackHandle
+- AudioApi → 命令キュー → 音声バックエンド
+
+3. Entityとの連携- AudioSource：アセット、音量、ループ、空間音響設定
+- AudioSystem：Componentの変更を再生側へ反映
+- Entity削除時の停止・後始末
+- BGMなどはEntityなしでも再生可能にする
+
+4. Bus- AudioBusId
+- Master・Music・SFXの音量管理
+- 音源の出力先Bus指定
+
+5. 3D音響- AudioListenerとTransformで聴く位置・向きを指定
+- AudioSourceのTransformから音源位置を取得
+- 基本の距離減衰・左右の定位
+- ユーザーSystemによるListener移動・減衰設定の変更
+- 独自計算を使う場合は標準の減衰を無効化可能にする
+
+6. 生成音源- パルス波などの波形生成
+- 外部生成PCMの連続再生
+- 将来のNES音源との接続
+
+7. 残響・音響効果- リバーブBusと音源ごとの送信量
+- フィルター、滑らかなパラメータ変更
+- ユーザーSystemが部屋・遮蔽物などから効果を制御
+
 * 共通スレッドプール
 * セーブ・ファイル機能
 	- ユーザ定義データの保存、復元

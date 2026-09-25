@@ -4,6 +4,7 @@ members = [
     "crates/renderer_vulkan",
     "crates/kani_volcano_math",
     "crates/kani_volcano_text",
+    "crates/kani_volcano_audio",
     "examples/basic_3d",
 ]
 resolver = "2"
