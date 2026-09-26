@@ -19,6 +19,10 @@ pub enum AssetLoadCommand{
         name: String,
         path: String,
     },
+    LoadAudio{
+        name: String,
+        path: String,
+    },
 }
 
 
@@ -81,6 +85,17 @@ impl AssetLoadCommandQueue{
         self.commands.push(AssetLoadCommand::LoadFont {
             name: name.to_string(), 
             path: path.to_string()
+        });
+    }
+
+    pub fn request_load_audio(
+        &mut self,
+        name: &str,
+        path: &str,
+    ){
+        self.commands.push(AssetLoadCommand::LoadAudio{
+            name: name.to_string(),
+            path: path.to_string(),
         });
     }
 }

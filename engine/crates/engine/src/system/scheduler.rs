@@ -1,5 +1,7 @@
 use anyhow::Result;
-
+use kani_volcano_audio::{
+    AudioSystem,
+};
 use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
@@ -204,12 +206,14 @@ impl Scheduler {
     pub unsafe fn register_asset_stage(
         &mut self,
         renderer: &mut VulkanRenderer,
+        audio_system: &mut AudioSystem,
         resources: &mut Resources,
     ) -> Result<Vec<AssetLoadOutcome>>{
         match &mut self.asset_load_system{
             Some(system) => unsafe{
                 system.register_asset_stage(
                     renderer,
+                    audio_system,
                     resources,
                 )
             },

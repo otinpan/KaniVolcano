@@ -6,12 +6,15 @@ use renderer_vulkan::{
     decode_skybox_texture, decode_texture, load_model_source, DebugLineVertex,
     DecodedTexture, Lit3DVertex, Mesh3DVertex, MeshData, VertexLayout, VulkanRenderer,
 };
+use kani_volcano_audio::{
+    DecodedAudio, AudioSystem
+};
 
 use crate::Resources;
 use super::{AssetLoadCommand, AssetLoadCommandQueue};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AssetKind { Model, Texture, SkyboxTexture, Font }
+pub enum AssetKind { Model, Texture, SkyboxTexture, Font, Audio }
 
 /// One result per request, including failures. No GPU objects cross threads.
 pub struct AssetLoadOutcome {
@@ -31,6 +34,7 @@ enum PreparedAsset {
     Texture(DecodedTexture),
     SkyboxTexture(DecodedTexture),
     Font(Vec<u8>),
+    Audio(DecodedAudio),
 }
 
 struct CompletedAssetLoad {
@@ -45,6 +49,7 @@ fn prepare_asset(command: AssetLoadCommand) -> CompletedAssetLoad {
         AssetLoadCommand::LoadTexture { name, .. } => (AssetKind::Texture, name.clone()),
         AssetLoadCommand::LoadSkyboxTexture { name, .. } => (AssetKind::SkyboxTexture, name.clone()),
         AssetLoadCommand::LoadFont { name, .. } => (AssetKind::Font, name.clone()),
+        AssetLoadCommand::LoadAudio{name , ..} => (AssetKind::Audio, name.clone()),
     };
     // A malformed asset must not kill the worker and strand later requests.
     let result = std::panic::catch_unwind(|| -> Result<PreparedAsset> {
@@ -70,6 +75,9 @@ fn prepare_asset(command: AssetLoadCommand) -> CompletedAssetLoad {
             }
             AssetLoadCommand::LoadFont { path, .. } => {
                 Ok(PreparedAsset::Font(std::fs::read(&path).with_context(|| format!("font: {path}"))?))
+            }
+            AssetLoadCommand::LoadAudio{path, ..} =>{
+                Ok(PreparedAsset::Audio(DecodedAudio::from_file(&path)?))
             }
         }
     }).unwrap_or_else(|_| Err(anyhow!("asset preparation panicked")));
@@ -117,7 +125,11 @@ impl AssetLoadSystem {
 
     /// Call on the renderer's owning thread, before recording rendering commands.
     /// At most four completed assets are registered per call (not a time budget).
-    pub unsafe fn register_asset_stage(&mut self, renderer: &mut VulkanRenderer, resources: &mut Resources)
+    pub unsafe fn register_asset_stage(
+        &mut self, 
+        renderer: &mut VulkanRenderer, 
+        audio_system: &mut AudioSystem,
+        resources: &mut Resources)
         -> Result<Vec<AssetLoadOutcome>>
     {
         let receiver = self.completed_rx.as_ref().ok_or_else(|| anyhow!("asset loader is shut down"))?;
@@ -130,7 +142,7 @@ impl AssetLoadSystem {
                 Err(TryRecvError::Disconnected) => return Err(anyhow!("asset worker disconnected")),
             };
             let result = completed.result.and_then(|asset| unsafe {
-                register_asset(renderer, resources, &completed.name, asset)
+                register_asset(renderer, audio_system, resources, &completed.name, asset)
             });
             outcomes.push(AssetLoadOutcome { kind: completed.kind, name: completed.name, result });
         }
@@ -154,7 +166,13 @@ impl Drop for AssetLoadSystem {
 }
 
 // register asseet to vulkan renderer and resources in main thread
-unsafe fn register_asset(renderer: &mut VulkanRenderer, resources: &mut Resources, name: &str, asset: PreparedAsset) -> Result<()> {
+unsafe fn register_asset(
+    renderer: &mut VulkanRenderer,
+    audio_system: &mut AudioSystem,
+    resources: &mut Resources, 
+    name: &str,
+    asset: PreparedAsset) -> Result<()> 
+{
     match asset {
         PreparedAsset::Model(model, auto_release) => {
             anyhow::ensure!(resources.model_asset_id(name).is_none(), "model already registered: {name}");
@@ -179,6 +197,11 @@ unsafe fn register_asset(renderer: &mut VulkanRenderer, resources: &mut Resource
             anyhow::ensure!(resources.font_asset_id(name).is_none(), "font already registered: {name}");
             let handle = renderer.load_font(bytes)?;
             resources.register_font(name, handle)?;
+        }
+        PreparedAsset::Audio(audio) =>{
+            anyhow::ensure!(resources.audio_asset_id(name).is_none(), "audio already registerd: {name}");
+            let handle=audio_system.register_audio(audio)?;
+            resources.register_audio(name,handle)?;
         }
     }
     Ok(())

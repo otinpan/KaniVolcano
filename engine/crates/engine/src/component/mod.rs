@@ -6,6 +6,7 @@
     clippy::unnecessary_wraps
 )]
 
+mod audio;
 mod camera;
 mod material;
 mod mesh_renderer;

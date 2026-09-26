@@ -1,10 +1,12 @@
 use crate::app::{DEFAULT_SKYBOX_TEXTURE, DEFAULT_TEXTURE};
 use crate::{
     MeshAsset, MeshAssetId, PrimitiveType, RenderCommandApi, Resources,
-    FontAsset, FontAssetId,
+    FontAsset, FontAssetId, AudioAsset, AudioAssetId, AudioEmitterResource, 
+    AudioEmitterId, AudioBusResource, AudioBusId,
 };
 use anyhow::{Result, anyhow};
 use renderer_vulkan::{SkyboxTextureHandle, TextureHandle, VertexLayout};
+use winit::keyboard::Key::Named;
 
 pub trait AssetApi {
     fn resources(&self) -> &Resources;
@@ -83,5 +85,31 @@ pub trait AssetApi {
         self.resources()
             .font_asset_id(name)
             .ok_or_else(|| anyhow!("font not found: {name}"))
+    }
+
+    // audio
+    fn audio_assets(&self) -> impl Iterator<Item = (AudioAssetId, &AudioAsset)>{
+        self.resources().audio_assets()
+    }
+    fn audio_asset_id(&self, name: &str) -> Result<AudioAssetId>{
+        self.resources()
+            .audio_asset_id(name)
+            .ok_or_else(|| anyhow!("audio not found: {name}"))
+    }
+    fn audio_emitters(&self) -> impl Iterator<Item = (AudioEmitterId, &AudioEmitterResource)>{
+        self.resources().audio_emitters()
+    }
+    fn audio_emitter_id(&self, name: &str) -> Result<AudioEmitterId>{
+        self.resources()
+            .audio_emitter_id(name)
+            .ok_or_else(|| anyhow!("audio emitter not found: {name}"))
+    }
+    fn audio_buses(&self) -> impl Iterator<Item = (AudioBusId, &AudioBusResource)>{
+        self.resources().audio_buses()
+    }
+    fn audio_bus_id(&self, name: &str) -> Result<AudioBusId>{
+        self.resources()
+            .audio_bus_id(name)
+            .ok_or_else(|| anyhow!("audio bus not found: {name}"))
     }
 }

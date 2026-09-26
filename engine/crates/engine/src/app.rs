@@ -3,6 +3,9 @@ use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
 };
+use kani_volcano_audio::{
+    AudioSystem,
+};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -16,7 +19,7 @@ use crate::primitive::{
 
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
-    UpdateContext, FontAssetId,
+    UpdateContext, FontAssetId, AudioAssetId,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -26,6 +29,7 @@ pub type Vec2 = cgmath::Vector2<f32>;
 
 pub struct App {
     pub renderer: VulkanRenderer,
+    pub audio_system: AudioSystem,
     pub world: World,
     pub input: Input,
     pub time: Time,
@@ -45,6 +49,7 @@ pub struct App {
 impl App {
     pub unsafe fn create(window: &Window) -> Result<Self> {
         let mut renderer = VulkanRenderer::create(window)?;
+        let audio_system=AudioSystem::new()?;
         let world = World::default();
 
         // load data
@@ -62,6 +67,7 @@ impl App {
         let scene_commands = SceneCommandQueue::default();
         let mut app = Self {
             renderer,
+            audio_system,
             world,
             input,
             time: Time::default(),
@@ -97,6 +103,7 @@ impl App {
         let outcomes=unsafe{
             self.scheduler.register_asset_stage(
                 &mut self.renderer,
+                &mut self.audio_system,
                 &mut self.resources,
             )?
         };
@@ -285,6 +292,20 @@ impl App {
 
         let handle=self.renderer.load_font(bytes)?;
         self.resources.register_font(name,handle)
+    }
+
+    pub unsafe fn load_audio(
+        &mut self,
+        name: &str,
+        path: &str,
+    ) -> Result<AudioAssetId>{
+        anyhow::ensure!(
+            self.resources.audio_asset_id(name).is_none(),
+            "audio already registered: {name}"
+        );
+
+        let handle=self.audio_system.load_audio(path)?;
+        self.resources.register_audio(name, handle)
     }
 
     /// Sets the fixed update interval in seconds.

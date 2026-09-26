@@ -42,5 +42,14 @@ pub trait AssetLoadApi{
             .request_load_font(name,path);
     }
 
+    fn request_load_audio(
+        &mut self,
+        name: &str,
+        path: &str
+    ){
+        self.asset_load_commands_mut()
+            .request_load_audio(name, path);
+    }
+
 
 }

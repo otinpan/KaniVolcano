@@ -28,7 +28,10 @@ pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
 pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
 pub use renderer_vulkan::{PipelineKey, VertexLayout};
-pub use resources::{MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset};
+pub use resources::{
+    MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
+    AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource, 
+};
 pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
 pub use scene_manager::SceneManager;
