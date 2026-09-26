@@ -44,9 +44,9 @@ pub enum AudioBusKind {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ReverbSettings {
-    pub feedback: f64,
-    pub damping: f64,
-    pub stereo_width: f64,
+    pub feedback: f64,     // Controls how much of the reverberated signal is fed back into the effect.
+    pub damping: f64,      // Controls how quickly high-frequency sounds are attenuated in the reverb.
+    pub stereo_width: f64, // Controls the perceived width of the reverb in the stereo field.
 }
 
 

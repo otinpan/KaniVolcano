@@ -7,21 +7,22 @@ use kira::{
     DefaultBackend,
     sound::static_sound::{
         StaticSoundData,
-        StaticSoundHandle,
     },
+    sound::{PlaybackState},
     effect::{
         reverb::{ReverbBuilder},
     },
     track::{
-        TrackHandle, TrackBuilder, SendTrackBuilder,
+        TrackBuilder, SendTrackBuilder,
     },
 };
 
 mod emitter;
 mod audio;
 mod bus;
+mod playback;
 pub use crate::emitter::{
-    AudioEmitterHandle, EmitterSettings, AudioSend,
+    AudioEmitterHandle, EmitterState, EmitterSettings, AudioSend,
 };
 pub use crate::audio::{
     AudioHandle, DecodedAudio
@@ -30,10 +31,9 @@ pub use crate::bus::{
     AudioBusHandle, AudioBusDescriptor, AudioBusKind, make_tween, ReverbSettings,
     BusState, BusTrack,
 };
-
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct PlaybackHandle(pub usize);
+pub use crate::playback::{
+    PlaybackHandle, PlaybackEntry, PlaybackTarget, PlaybackSettings,
+};
 
 
 pub struct AudioSystem{
@@ -47,20 +47,9 @@ pub struct AudioSystem{
     next_audio_id: usize,
     next_emitter_id: usize,
     next_bus_id: usize,
+    next_playback_id: usize,
 }
 
-
-
-
-struct EmitterState{
-    track: TrackHandle,
-}
-
-struct PlaybackEntry{
-    audio: AudioHandle,
-    emitter: AudioEmitterHandle,
-    sound: StaticSoundHandle,
-}
 
 impl AudioSystem{
     pub fn new() -> Result<Self> {
@@ -89,6 +78,7 @@ impl AudioSystem{
             next_audio_id: 0,
             next_emitter_id: 0,
             next_bus_id: 1, // 0 is master bus
+            next_playback_id: 0,
         })
     }
 
@@ -178,8 +168,8 @@ impl AudioSystem{
             BusTrack::Master=>{
                 self.manager.add_sub_track(builder)?
             }
-            BusTrack::Sub(parent) =>{
-                parent.add_sub_track(builder)?
+            BusTrack::Sub(target) =>{
+                target.add_sub_track(builder)?
             }
             BusTrack::Reverb{..} =>{
                 return Err(anyhow!{
@@ -190,7 +180,11 @@ impl AudioSystem{
 
         let handle=AudioEmitterHandle(self.next_emitter_id);
 
-        self.emitters.insert(handle,EmitterState { track });
+        self.emitters.insert(handle,EmitterState { 
+            track,
+            panning: settings.panning
+        });
+
         self.next_emitter_id=next;
 
         Ok(handle)
@@ -343,36 +337,115 @@ impl AudioSystem{
     }
 
     // player ////////////////////
-    /*pub fn play(
+    fn prepare_playback(
         &mut self,
         audio: AudioHandle,
         settings: PlaybackSettings
-    ) -> Result<PlayBackHandle>{
+    ) -> Result<StaticSoundData>{
+        let volume=gain_to_decibels(settings.volume)?;
 
+        let data=self.assets.get(&audio)
+            .ok_or_else(||anyhow!("audio not found: {audio:?}"))?;
+
+        let data=data.volume(volume);
+
+        Ok(if settings.looping{
+            data.loop_region(..)
+        }else{
+            data.loop_region(None)
+        })
     }
 
-    pub fn play_emitter(
+    fn next_playback_handle(&self) -> Result<(PlaybackHandle, usize)>{
+        let next=self.next_playback_id
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("playback handle ID exhausted"))?;
+
+        Ok((PlaybackHandle(self.next_playback_id),next))
+    }
+
+    pub fn play(
         &mut self,
         audio: AudioHandle,
-        emitter: AudioEmitterHandle,
+        settings: PlaybackSettings
     ) -> Result<PlaybackHandle>{
-
+        self.play_on_bus(audio,self.master_bus(),settings)
     }
 
     pub fn play_on_bus(
         &mut self,
         audio: AudioHandle,
         bus: AudioBusHandle,
-        settings: PlaybackSettings
+        settings: PlaybackSettings,
     ) -> Result<PlaybackHandle>{
+        let data=self.prepare_playback(audio,settings)?;
+        let (handle,next)=self.next_playback_handle()?;
 
+        let state=self.buses.get_mut(&bus)
+            .ok_or_else(|| anyhow!("bus not found: {bus:?}"))?;
+
+        let sound=match  &mut state.track{
+            BusTrack::Master => self.manager.play(data)?,
+            BusTrack::Sub(track) => track.play(data)?,
+            BusTrack::Reverb{..} =>{
+                return Err(anyhow!(
+                    "cannot play directly on a send bus: {bus:?}"
+                ));
+            }
+        };
+
+        self.playbacks.insert(
+            handle,
+            PlaybackEntry { audio, target: PlaybackTarget::Bus(bus), sound }
+        );
+        self.next_playback_id=next;
+        Ok(handle)
     }
+
+    pub fn play_emitter(
+        &mut self,
+        audio: AudioHandle,
+        emitter: AudioEmitterHandle,
+        settings: PlaybackSettings,
+    ) -> Result<PlaybackHandle>{
+        let data=self.prepare_playback(audio, settings)?;
+        let (handle, next)=self.next_playback_handle()?;
+
+        let state=self.emitters.get_mut(&emitter)
+            .ok_or_else(|| anyhow!("emitter not found: {emitter:?}"))?;
+
+        ensure!(
+            state.panning.is_finite() && (-1.0..=1.0).contains(&state.panning),
+            "panning must be between -1.0 and 1.0"
+        );
+
+        let data=data.panning(kira::Panning(state.panning));
+
+        // audio flows through all configured bus routes.
+        let sound=state.track.play(data)?;
+
+        self.playbacks.insert(
+            handle,
+            PlaybackEntry { audio, target: PlaybackTarget::Emitter(emitter), sound }
+        );
+
+        self.next_playback_id=next;
+        Ok(handle)
+    }
+
 
     pub fn stop(
         &mut self,
         playback: PlaybackHandle,
         fade_seconds: f32, 
     ) -> Result<()>{
+        let tween=make_tween(fade_seconds)?;
+
+        let entry=self.playbacks.get_mut(&playback)
+            .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
+
+        entry.sound.stop(tween);
+
         Ok(())
     }
 
@@ -381,6 +454,13 @@ impl AudioSystem{
         playback: PlaybackHandle,
         fade_seconds: f32,
     ) -> Result<()>{
+        let tween=make_tween(fade_seconds)?;
+
+        let entry=self.playbacks.get_mut(&playback)
+            .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
+
+        entry.sound.pause(tween);
+
         Ok(())
     }
 
@@ -389,6 +469,13 @@ impl AudioSystem{
         playback: PlaybackHandle,
         fade_seconds: f32,
     ) -> Result<()>{
+        let tween=make_tween(fade_seconds)?;
+
+        let entry=self.playbacks.get_mut(&playback)
+            .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
+        
+        entry.sound.resume(tween);
+
         Ok(())
     }
 
@@ -398,21 +485,62 @@ impl AudioSystem{
         volume: f32,
         transition_seconds: f32,
     ) -> Result<()>{
+        let volume=gain_to_decibels(volume)?;
+        let tween=make_tween(transition_seconds)?;
 
+        let entry=self.playbacks.get_mut(&playback)
+            .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
+
+        entry.sound.set_volume(volume, tween);
+
+        Ok(())
     }
 
-    pub fn playback_state(&self, playback: PlaybackHandle) -> Option<PlaybackState>{
+    pub fn set_playback_mute(
+        &mut self,
+        playback: PlaybackHandle,
+    ) -> Result<()>{
+        let volume=gain_to_decibels(0.0)?;
+        let tween=make_tween(0.0)?;
 
+        let entry=self.playbacks.get_mut(&playback)
+        .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
+
+        entry.sound.set_volume(volume, tween);
+        Ok(())
+    }
+
+    pub fn playback_state(
+        &self,
+        playback: PlaybackHandle
+    ) -> Option<PlaybackState>{
+        self.playbacks.get(&playback).map(|entry| entry.sound.state())
     }
 
     // finish /////////////////////////
     pub fn collect_finished(&mut self) -> Vec<PlaybackHandle>{
+        let mut finished=Vec::new();
 
+        self.playbacks.retain(|handle, entry|{
+            if entry.sound.state()==PlaybackState::Stopped{
+                finished.push(*handle);
+                false
+            }else{
+                true
+            }
+        });
+
+        finished
     }
 
-    pub fn shutdown(&mut self) -> Result<()>{
-        Ok(())
-    }*/
+    pub fn shutdown(self){
+        drop(self.manager);
+
+        drop(self.playbacks);
+        drop(self.emitters);
+        drop(self.buses);
+        drop(self.assets);
+    }
 }
 
 pub fn gain_to_decibels(gain: f32) -> Result<Decibels> {
