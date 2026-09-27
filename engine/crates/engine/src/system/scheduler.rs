@@ -6,6 +6,7 @@ use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
     UpdateSystem, TextRenderSystem, AssetLoadSystem, AssetLoadCommandQueue, AssetLoadOutcome,
+    AudioCommandQueue, AudioCommandSystem,
 };
 
 use crate::{Input, Resources, SceneCommandQueue, Time, World};
@@ -20,8 +21,10 @@ pub struct Scheduler {
     pub render_system: RenderSystem,
     pub text_render_system: TextRenderSystem,
     pub asset_load_system: Option<AssetLoadSystem>,
+    pub audio_command_system: AudioCommandSystem,
     pub render_commands: RenderCommandQueue,
     pub asset_load_commands: AssetLoadCommandQueue,
+    pub audio_commands: AudioCommandQueue,
     update_systems: Vec<ScheduledUpdateSystem>,
     fixed_update_systems: Vec<ScheduledUpdateSystem>,
 }
@@ -40,8 +43,10 @@ impl Scheduler {
         render_system: RenderSystem,
         text_render_system: TextRenderSystem,
         asset_load_system: Option<AssetLoadSystem>,
+        audio_command_system: AudioCommandSystem,
         render_commands: RenderCommandQueue,
         asset_load_commands: AssetLoadCommandQueue,
+        audio_commands: AudioCommandQueue,
         update_systems: Vec<ScheduledUpdateSystem>,
         fixed_update_systems: Vec<ScheduledUpdateSystem>,
     ) -> Self {
@@ -51,8 +56,10 @@ impl Scheduler {
             render_system,
             text_render_system,
             asset_load_system,
+            audio_commands,
             render_commands,
             asset_load_commands,
+            audio_command_system,
             update_systems,
             fixed_update_systems,
         }
@@ -127,6 +134,7 @@ impl Scheduler {
             resources,
             &mut self.render_commands,
             &mut self.asset_load_commands,
+            &mut self.audio_commands,
             scene_commands,
         );
 
@@ -148,6 +156,7 @@ impl Scheduler {
             resources,
             &mut self.render_commands,
             &mut self.asset_load_commands,
+            &mut self.audio_commands,
             scene_commands,
         );
 
@@ -174,6 +183,7 @@ impl Scheduler {
             resources,
             &mut self.render_commands,
             &mut self.asset_load_commands,
+            &mut self.audio_commands,
             scene_commands,
         );
 
@@ -235,6 +245,18 @@ impl Scheduler {
         Ok(())
     }
 
+    pub fn run_audio_stage(
+        &mut self,
+        audio_system: &mut AudioSystem,
+        resources: &mut Resources,
+    ) -> Result<()>{
+        self.audio_command_system.run(
+            &mut self.audio_commands,
+            resources,
+            audio_system
+        )
+    }
+
 
 }
 
@@ -246,8 +268,10 @@ impl Default for Scheduler {
             render_system: RenderSystem,
             text_render_system: TextRenderSystem::default(),
             asset_load_system: None,
+            audio_command_system: AudioCommandSystem::default(),
             render_commands: RenderCommandQueue::default(),
             asset_load_commands: AssetLoadCommandQueue::default(),
+            audio_commands: AudioCommandQueue::default(),
             update_systems: Vec::new(),
             fixed_update_systems: Vec::new(),
         }

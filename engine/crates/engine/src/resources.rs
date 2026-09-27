@@ -6,9 +6,9 @@ use renderer_vulkan::{
     FontHandle,
 };
 use kani_volcano_audio::{
-    AudioHandle, AudioBusHandle, AudioEmitterHandle,
+    AudioHandle, AudioBusHandle, AudioEmitterHandle, PlaybackHandle,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type Vec3 = Vector3<f32>;
 
@@ -53,6 +53,15 @@ pub struct AudioBusResource{
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AudioBusId(pub usize);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioPlaybackResource{
+    Pending, 
+    Active(PlaybackHandle),
+}
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AudioPlaybackId(pub usize);
+
+
 pub struct Resources {
     mesh_assets: Vec<Option<MeshAsset>>,
     models: HashMap<String, MeshAssetId>,
@@ -70,6 +79,8 @@ pub struct Resources {
     audio_emitters: HashMap<String, AudioEmitterId>,
     audio_bus_resources: Vec<Option<AudioBusResource>>,
     audio_buses: HashMap<String, AudioBusId>,
+    audio_playback_resources: HashMap<AudioPlaybackId, AudioPlaybackResource>,
+    next_audio_playback_id: usize,
 }
 
 impl Resources {
@@ -107,6 +118,58 @@ impl Resources {
         self.audio_bus_resources.push(Some(AudioBusResource{handle}));
         self.audio_buses.insert(name.to_string(), id);
         Ok(id)
+    }
+    // reserves an ID before the queued playback is started.
+    // Reserve a playback ID before processing the queue so callers can reference this specific playback immediately.
+    // Unlike buses and emitters, playbacks are identified by generated IDs rather than user-provided names.
+    pub fn reserve_audio_playback(&mut self) -> Result<AudioPlaybackId> {
+        let id = AudioPlaybackId(self.next_audio_playback_id);
+        let next = self.next_audio_playback_id.checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("audio playback ID exhausted"))?;
+        self.audio_playback_resources.insert(id, AudioPlaybackResource::Pending);
+        self.next_audio_playback_id = next;
+        Ok(id)
+    }
+
+    pub fn activate_audio_playback(
+        &mut self,
+        id: AudioPlaybackId,
+        handle: PlaybackHandle,
+    ) -> Result<()> {
+        let resource = self.audio_playback_resources.get_mut(&id)
+            .ok_or_else(|| anyhow::anyhow!("audio playback not found: {id:?}"))?;
+        anyhow::ensure!(matches!(resource, AudioPlaybackResource::Pending),
+            "audio playback already active: {id:?}");
+        *resource = AudioPlaybackResource::Active(handle);
+        Ok(())
+    }
+
+    pub fn audio_playback(&self, id: AudioPlaybackId) -> Option<&AudioPlaybackResource> {
+        self.audio_playback_resources.get(&id)
+    }
+
+    pub fn get_audio_playback_handle(&self, id: AudioPlaybackId) -> Option<PlaybackHandle> {
+        match self.audio_playback(id)? {
+            AudioPlaybackResource::Pending => None,
+            AudioPlaybackResource::Active(handle) => Some(*handle),
+        }
+    }
+
+    /// Removes the mapping only; this does not stop backend playback.
+    pub fn remove_audio_playback(&mut self, id: AudioPlaybackId) -> Option<AudioPlaybackResource> {
+        self.audio_playback_resources.remove(&id)
+    }
+
+    /// Removes mappings for handles returned by AudioSystem::collect_finished.
+    pub fn remove_finished_audio_playbacks(&mut self, finished: &[PlaybackHandle]) {
+        if finished.is_empty() {
+            return;
+        }
+        let finished: HashSet<_> = finished.iter().copied().collect();
+        self.audio_playback_resources.retain(|_, resource| match resource {
+            AudioPlaybackResource::Pending => true,
+            AudioPlaybackResource::Active(handle) => !finished.contains(handle),
+        });
     }
 
     pub fn font_asset(&self, id: FontAssetId) -> Option<&FontAsset> {
@@ -277,6 +340,10 @@ impl Resources {
     pub fn audio_asset_id(&self, name: &str) -> Option<AudioAssetId>{
         self.audio.get(name).copied()
     }
+    pub fn get_audio_handle(&self, id: AudioAssetId) -> Option<AudioHandle>{
+        self.audio_assets.get(id.0)?.as_ref()
+            .map(|resource| resource.handle)
+    }
 
     pub fn audio_emitters(&self) -> impl Iterator<Item=(AudioEmitterId, &AudioEmitterResource)>{
         self.audio_emitter_resources
@@ -371,6 +438,8 @@ impl Default for Resources {
             audio_emitters: HashMap::new(),
             audio_bus_resources: Vec::new(),
             audio_buses: HashMap::new(),
+            audio_playback_resources: HashMap::new(),
+            next_audio_playback_id: 0,
         }
     }
 }
@@ -379,6 +448,65 @@ impl Default for Resources {
 mod tests {
     use super::*;
     use renderer_vulkan::{FontHandle};
+
+    #[test]
+    fn playback_reservation_activation_and_removal() {
+        let mut resources = Resources::default();
+        let id = resources.reserve_audio_playback().unwrap();
+        assert_eq!(resources.audio_playback(id), Some(&AudioPlaybackResource::Pending));
+        assert_eq!(resources.get_audio_playback_handle(id), None);
+        resources.activate_audio_playback(id, PlaybackHandle(12)).unwrap();
+        assert_eq!(resources.get_audio_playback_handle(id), Some(PlaybackHandle(12)));
+        assert!(resources.activate_audio_playback(id, PlaybackHandle(99)).is_err());
+        assert_eq!(resources.get_audio_playback_handle(id), Some(PlaybackHandle(12)));
+        assert_eq!(resources.remove_audio_playback(id), Some(AudioPlaybackResource::Active(PlaybackHandle(12))));
+        assert_eq!(resources.audio_playback(id), None);
+        assert_eq!(resources.get_audio_playback_handle(id), None);
+        assert_eq!(resources.remove_audio_playback(id), None);
+        assert!(resources.activate_audio_playback(id, PlaybackHandle(99)).is_err());
+        assert!(resources.activate_audio_playback(AudioPlaybackId(usize::MAX), PlaybackHandle(99)).is_err());
+    }
+
+    #[test]
+    fn playback_ids_are_not_reused_after_removal() {
+        let mut resources = Resources::default();
+        let first = resources.reserve_audio_playback().unwrap();
+        let second = resources.reserve_audio_playback().unwrap();
+        assert_eq!(resources.remove_audio_playback(first), Some(AudioPlaybackResource::Pending));
+        let third = resources.reserve_audio_playback().unwrap();
+        assert_ne!(third, first);
+        assert_ne!(third, second);
+        assert_eq!(resources.audio_playback(second), Some(&AudioPlaybackResource::Pending));
+    }
+
+    #[test]
+    fn playback_id_exhaustion_leaves_resources_unchanged() {
+        let mut resources = Resources::default();
+        let id = resources.reserve_audio_playback().unwrap();
+        resources.next_audio_playback_id = usize::MAX;
+        assert!(resources.reserve_audio_playback().is_err());
+        assert_eq!(resources.next_audio_playback_id, usize::MAX);
+        assert_eq!(resources.audio_playback_resources.len(), 1);
+        assert_eq!(resources.audio_playback(id), Some(&AudioPlaybackResource::Pending));
+    }
+
+    #[test]
+    fn finished_playback_cleanup_preserves_pending_and_other_active_playbacks() {
+        let mut resources = Resources::default();
+        let pending = resources.reserve_audio_playback().unwrap();
+        let finished = resources.reserve_audio_playback().unwrap();
+        let active = resources.reserve_audio_playback().unwrap();
+        resources.activate_audio_playback(finished, PlaybackHandle(10)).unwrap();
+        resources.activate_audio_playback(active, PlaybackHandle(20)).unwrap();
+        resources.remove_finished_audio_playbacks(&[]);
+        assert_eq!(resources.audio_playback_resources.len(), 3);
+        resources.remove_finished_audio_playbacks(&[PlaybackHandle(10), PlaybackHandle(10), PlaybackHandle(99)]);
+        assert_eq!(resources.audio_playback(finished), None);
+        assert_eq!(resources.audio_playback(pending), Some(&AudioPlaybackResource::Pending));
+        assert_eq!(resources.get_audio_playback_handle(active), Some(PlaybackHandle(20)));
+        resources.remove_finished_audio_playbacks(&[PlaybackHandle(10)]);
+        assert_eq!(resources.audio_playback_resources.len(), 2);
+    }
 
     #[test]
     fn duplicate_font_registration_preserves_original() {

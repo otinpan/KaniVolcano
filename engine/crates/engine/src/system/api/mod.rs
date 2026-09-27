@@ -14,6 +14,7 @@ mod render_command_api;
 mod scene_api;
 mod time_api;
 mod asset_load_api;
+mod audio_api;
 
 pub use asset_api::AssetApi;
 pub use entity_api::EntityApi;
@@ -23,3 +24,4 @@ pub use render_command_api::RenderCommandApi;
 pub use scene_api::SceneCommandApi;
 pub use time_api::TimeApi;
 pub use asset_load_api::AssetLoadApi;
+pub use audio_api::AudioApi;

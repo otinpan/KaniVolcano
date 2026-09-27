@@ -117,6 +117,10 @@ impl AudioSystem{
         &mut self,
         settings: EmitterSettings,
     ) -> Result<AudioEmitterHandle>{
+        ensure!(
+            settings.panning.is_finite() && (-1.0..=1.0).contains(&settings.panning),
+            "panning must be between -1.0 and 1.0"
+        );
         let next=self.next_emitter_id
             .checked_add(1)
             .ok_or_else(|| anyhow!("emitter handle ID exhausted"))?;
@@ -188,6 +192,52 @@ impl AudioSystem{
         self.next_emitter_id=next;
 
         Ok(handle)
+    }
+
+    pub fn set_emitter_volume(
+        &mut self,
+        emitter: AudioEmitterHandle,
+        volume: f32,
+        fade_seconds: f32,
+    ) -> Result<()> {
+        let volume = gain_to_decibels(volume)?;
+        let tween = make_tween(fade_seconds)?;
+
+        let state = self.emitters.get_mut(&emitter)
+            .ok_or_else(|| anyhow!("emitter not found: {emitter:?}"))?;
+
+        state.track.set_volume(volume, tween);
+        Ok(())
+    }
+    pub fn set_emitter_panning(
+        &mut self,
+        emitter: AudioEmitterHandle,
+        panning: f32,
+        fade_seconds: f32,
+    ) -> Result<()> {
+        ensure!(
+            panning.is_finite() && (-1.0..=1.0).contains(&panning),
+            "panning must be between -1.0 and 1.0"
+        );
+        let tween = make_tween(fade_seconds)?;
+
+        let state = self.emitters.get_mut(&emitter)
+            .ok_or_else(|| anyhow!("emitter not found: {emitter:?}"))?;
+
+        // Apply this value to future playbacks.
+        state.panning = panning;
+
+        // Update existing playbacks routed through this emitter.
+        for entry in self.playbacks.values_mut() {
+            if matches!(
+                &entry.target,
+                PlaybackTarget::Emitter(target) if *target == emitter
+            ) {
+                entry.sound.set_panning(kira::Panning(panning), tween);
+            }
+        }
+
+        Ok(())
     }
 
     // Bus //////////////////
@@ -296,21 +346,6 @@ impl AudioSystem{
             }
         }
         Ok(())
-    }
-
-    pub fn set_bus_muted(
-        &mut self,
-        bus: AudioBusHandle,
-        muted: bool,
-    ) -> Result<()>{
-        let tween = make_tween(0.01)?;
-        let state = self.buses.get_mut(&bus)
-            .ok_or_else(|| anyhow!("bus not found: {bus:?}"))?;
-        if state.muted == muted {
-            return Ok(());
-        }
-        state.muted = muted;
-        self.apply_bus_volume(bus, tween)
     }
 
     pub fn set_bus_reverb(
@@ -496,19 +531,6 @@ impl AudioSystem{
         Ok(())
     }
 
-    pub fn set_playback_mute(
-        &mut self,
-        playback: PlaybackHandle,
-    ) -> Result<()>{
-        let volume=gain_to_decibels(0.0)?;
-        let tween=make_tween(0.0)?;
-
-        let entry=self.playbacks.get_mut(&playback)
-        .ok_or_else(|| anyhow!("playback not found: {playback:?}"))?;
-
-        entry.sound.set_volume(volume, tween);
-        Ok(())
-    }
 
     pub fn playback_state(
         &self,

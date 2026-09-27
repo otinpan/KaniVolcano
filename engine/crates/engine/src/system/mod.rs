@@ -17,9 +17,11 @@ mod update;
 mod text_render_system;
 mod asset_load_system;
 mod asset_load_command;
+mod audio_command_system;
+mod audio_command;
 
 pub use api::{
-    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi,
+    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi,
 };
 pub use command::{
     Command, CommandContext, CommandSystem, CreatePrimitiveCommand, DebugMonitor,
@@ -35,3 +37,5 @@ pub use update::{CameraSystem, RotatorSystem, ScheduledUpdateSystem, UpdateConte
 pub use text_render_system::{TextRenderSystem, TextLayout};
 pub use asset_load_system::{AssetLoadSystem, AssetLoadOutcome, AssetKind};
 pub use asset_load_command::{AssetLoadCommand, AssetLoadCommandQueue};
+pub use audio_command::{AudioCommand, AudioCommandQueue, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend};
+pub use audio_command_system::{AudioCommandSystem};

@@ -18,6 +18,7 @@ mod tags;
 mod text;
 mod visibility;
 
+pub use audio::AudioSource;
 pub use camera::Camera;
 pub use camera::Camera as CameraComponent;
 use kani_volcano_math::Transform;

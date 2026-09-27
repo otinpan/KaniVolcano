@@ -22,7 +22,7 @@ mod world;
 pub use app::App;
 pub use component::{
     Camera, CameraComponent, Component, Material, MeshRenderer, Name, PendingPrimitiveMesh,
-    Rotator, SceneId, SceneOwned, Tags, Visibility, Text, TextPipeline,
+    Rotator, SceneId, SceneOwned, Tags, Visibility, Text, TextPipeline, AudioSource,
 };
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
@@ -30,7 +30,8 @@ pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
 pub use renderer_vulkan::{PipelineKey, VertexLayout};
 pub use resources::{
     MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
-    AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource, 
+    AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource,
+    AudioPlaybackId, AudioPlaybackResource,
 };
 pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
@@ -43,17 +44,22 @@ pub use system::{
     SpawnPrimitiveCommand, SpawnVikingRoomCommand, TimeApi, UpdateContext,
     UpdatePrimitiveMeshesCommand, UpdateSystem, TextRenderSystem, TextLayout,
     AssetLoadCommand, AssetLoadCommandQueue, AssetLoadSystem, AssetLoadOutcome, AssetKind,
+    AudioCommand, AudioCommandQueue, AudioApi, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend,
+    AudioCommandSystem, 
 };
 pub use time::Time;
+pub use kani_volcano_audio::PlaybackSettings;
 pub use world::World;
 
 pub mod prelude {
     pub use crate::{
-        App, AssetApi, AssetLoadApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
+        App, AssetApi, AssetLoadApi, AudioApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline,
+        AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
+        AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings,
     };
 
     pub use kani_volcano_math::Transform;

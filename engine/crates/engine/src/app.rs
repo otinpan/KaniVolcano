@@ -19,7 +19,7 @@ use crate::primitive::{
 
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
-    UpdateContext, FontAssetId, AudioAssetId,
+    UpdateContext, FontAssetId, AudioAssetId, 
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -48,12 +48,18 @@ pub struct App {
 
 impl App {
     pub unsafe fn create(window: &Window) -> Result<Self> {
-        let mut renderer = VulkanRenderer::create(window)?;
         let audio_system=AudioSystem::new()?;
+        let mut renderer = VulkanRenderer::create(window)?;
         let world = World::default();
 
         // load data
         let mut resources = Resources::default();
+
+        // audio bus(0) = master bus
+        let master_bus_id=resources.register_audio_bus(
+            "master",
+            audio_system.master_bus(),
+        );
 
         let primitive_meshes = create_primitive_meshes(&mut renderer, &mut resources)?;
         resources.set_primitive_meshes(primitive_meshes);
@@ -154,6 +160,7 @@ impl App {
                 &mut self.resources,
                 &mut self.scheduler.render_commands,
                 &mut self.scheduler.asset_load_commands,
+                &mut self.scheduler.audio_commands,
                 &mut self.scene_commands,
             );
             self.scene_manager.update_current_scene(&mut context)?;
@@ -171,6 +178,11 @@ impl App {
 
         // load asset (read file, create pixels) in worker thread (maximum 4)
         self.scheduler.load_asset_stage()?;
+
+        self.scheduler.run_audio_stage(
+            &mut self.audio_system,
+            &mut self.resources,
+        )?;
 
         self.scheduler.run_render_stage(
             &mut self.world,

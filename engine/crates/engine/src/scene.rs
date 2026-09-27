@@ -3,7 +3,7 @@ use crate::component::Visibility;
 use crate::primitive::{PrimitiveShape, spawn_primitive_from_mesh};
 use crate::system::{
     AssetApi, Command, EntityApi, InputTrigger, ObjectApi, RenderCommandApi, UpdateContext,
-    UpdateSystem, AssetLoadApi, AssetLoadCommandQueue,
+    UpdateSystem, AssetLoadApi, AssetLoadCommandQueue, AudioApi, AudioCommandQueue,
 };
 use crate::{
     EntityId, Input, Material, MeshAssetId, PendingPrimitiveMesh, RenderCommandQueue, Resources,
@@ -246,6 +246,11 @@ impl AssetLoadApi for SceneContext<'_>{
     }
 }
 
+impl AudioApi for SceneContext<'_>{
+    fn audio_commands_mut(&mut self) -> &mut AudioCommandQueue{
+        &mut self.scheduler.audio_commands
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
