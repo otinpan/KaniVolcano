@@ -35,6 +35,20 @@ impl AudioCommandSystem{
         system: &mut AudioSystem,
     ) -> Result<()> {
             match command{
+                AudioCommand::DestroyEmitter { emitter } => {
+                    let handle = resources.get_audio_emitter_handle(emitter)
+                        .ok_or_else(|| anyhow!("audio emitter not found: {emitter:?}"))?;
+                    let removed = system.destroy_emitter(handle)?;
+                    resources.remove_finished_audio_playbacks(&removed);
+                    resources.remove_audio_emitter(emitter);
+                }
+                AudioCommand::DestroyBus { bus } => {
+                    let handle = resources.get_audio_bus_handle(bus)
+                        .ok_or_else(|| anyhow!("audio bus not found: {bus:?}"))?;
+                    let removed = system.destroy_bus(handle)?;
+                    resources.remove_finished_audio_playbacks(&removed);
+                    resources.remove_audio_bus(bus);
+                }
                 AudioCommand::CreateBus { name, settings } =>{
                     anyhow::ensure!(resources.audio_bus_id(&name).is_none(),
                         "audio bus already registered: {name}");

@@ -39,6 +39,8 @@ pub struct AudioSend{
 
 
 pub enum AudioCommand{
+    DestroyEmitter { emitter: AudioEmitterId },
+    DestroyBus { bus: AudioBusId },
     CreateBus{
         name: String,
         settings: AudioBusSettings,
@@ -110,6 +112,14 @@ pub struct AudioCommandQueue{
 }
 
 impl AudioCommandQueue{
+    pub fn destroy_emitter(&mut self, emitter: AudioEmitterId) {
+        self.commands.push(AudioCommand::DestroyEmitter { emitter });
+    }
+
+    pub fn destroy_bus(&mut self, bus: AudioBusId) {
+        self.commands.push(AudioCommand::DestroyBus { bus });
+    }
+
     pub(crate) fn drain(&mut self) -> impl Iterator<Item=AudioCommand> + '_{
         self.commands.drain(..)
     }

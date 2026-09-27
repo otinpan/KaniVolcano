@@ -10,6 +10,13 @@ use kani_volcano_audio::{PlaybackSettings, ReverbSettings};
 /// Queues audio operations for later application by the engine.
 pub trait AudioApi: AssetApi {
     fn audio_commands_mut(&mut self) -> &mut AudioCommandQueue;
+    fn destroy_emitter(&mut self, emitter: AudioEmitterId) {
+        self.audio_commands_mut().destroy_emitter(emitter);
+    }
+
+    fn destroy_bus(&mut self, bus: AudioBusId) {
+        self.audio_commands_mut().destroy_bus(bus);
+    }
 
     fn create_bus(&mut self, name: &str, settings: AudioBusSettings) {
         self.audio_commands_mut().create_bus(name, settings);

@@ -8,6 +8,8 @@ pub struct AudioEmitterHandle(pub usize);
 
 
 pub struct EmitterState{
+    pub(crate) output: AudioBusHandle,
+    pub(crate) sends: Vec<AudioBusHandle>,
     pub track: TrackHandle,
     pub panning: f32,
 }

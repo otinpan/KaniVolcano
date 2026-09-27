@@ -84,6 +84,19 @@ pub struct Resources {
 }
 
 impl Resources {
+    pub(crate) fn remove_audio_emitter(&mut self, id: AudioEmitterId) {
+        if let Some(slot) = self.audio_emitter_resources.get_mut(id.0) {
+            *slot = None;
+        }
+        self.audio_emitters.retain(|_, value| *value != id);
+    }
+
+    pub(crate) fn remove_audio_bus(&mut self, id: AudioBusId) {
+        if let Some(slot) = self.audio_bus_resources.get_mut(id.0) {
+            *slot = None;
+        }
+        self.audio_buses.retain(|_, value| *value != id);
+    }
     /// Parses and registers font bytes under a unique asset name.
     pub fn register_font(&mut self, name: &str, handle: FontHandle) -> Result<FontAssetId> {
         anyhow::ensure!(!self.fonts.contains_key(name), "font already registered: {name}");
@@ -566,14 +579,17 @@ mod tests {
         let mut resources = Resources::default();
         let old_emitter = resources.register_audio_emitter("old", AudioEmitterHandle(9)).unwrap();
         let old_bus = resources.register_audio_bus("old", AudioBusHandle(9)).unwrap();
-        // Simulate removing a name while retaining the storage slot.
-        resources.audio_emitters.remove("old");
-        resources.audio_buses.remove("old");
-        resources.audio_emitter_resources[old_emitter.0] = None;
-        resources.audio_bus_resources[old_bus.0] = None;
+        resources.remove_audio_emitter(old_emitter);
+        resources.remove_audio_bus(old_bus);
+        assert_eq!(resources.audio_emitter_id("old"), None);
+        assert_eq!(resources.audio_bus_id("old"), None);
 
-        let emitter = resources.register_audio_emitter("new", AudioEmitterHandle(42)).unwrap();
-        let bus = resources.register_audio_bus("new", AudioBusHandle(42)).unwrap();
+        let emitter = resources.register_audio_emitter("old", AudioEmitterHandle(42)).unwrap();
+        let bus = resources.register_audio_bus("old", AudioBusHandle(42)).unwrap();
+        resources.remove_audio_emitter(old_emitter);
+        resources.remove_audio_bus(old_bus);
+        assert_eq!(resources.audio_emitter_id("old"), Some(emitter));
+        assert_eq!(resources.audio_bus_id("old"), Some(bus));
 
         assert_ne!(emitter, old_emitter);
         assert_ne!(bus, old_bus);

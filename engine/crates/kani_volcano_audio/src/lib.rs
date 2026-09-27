@@ -62,6 +62,7 @@ impl AudioSystem{
         buses.insert(
             AudioBusHandle(0),
             BusState{
+                output: None,
                 track: BusTrack::Master,
                 volume: 1.0,
                 muted: false,
@@ -185,6 +186,8 @@ impl AudioSystem{
         let handle=AudioEmitterHandle(self.next_emitter_id);
 
         self.emitters.insert(handle,EmitterState { 
+            output: settings.output,
+            sends: settings.sends.iter().map(|send| send.bus).collect(),
             track,
             panning: settings.panning
         });
@@ -255,6 +258,10 @@ impl AudioSystem{
 
         let volume=gain_to_decibels(descriptor.volume)?;
 
+        let output = match &descriptor.kind {
+            AudioBusKind::Sub { output } => Some(*output),
+            AudioBusKind::Reverb { .. } => None,
+        };
         let track=match descriptor.kind{
             AudioBusKind::Sub{output} =>{
                 let builder=TrackBuilder::new().volume(volume);
@@ -300,6 +307,7 @@ impl AudioSystem{
 
         let handle=AudioBusHandle(self.next_bus_id);
         self.buses.insert(handle, BusState {
+            output,
             track,
             volume: descriptor.volume,
             muted: false,
@@ -553,6 +561,47 @@ impl AudioSystem{
         });
 
         finished
+    }
+
+    /// Stops this emitter's playbacks and releases its track.
+    pub fn destroy_emitter(&mut self, emitter: AudioEmitterHandle) -> Result<Vec<PlaybackHandle>> {
+        ensure!(self.emitters.contains_key(&emitter), "emitter not found: {emitter:?}");
+        let tween = make_tween(0.0)?;
+        let mut removed = Vec::new();
+        self.playbacks.retain(|handle, entry| {
+            if matches!(&entry.target, PlaybackTarget::Emitter(target) if *target == emitter) {
+                entry.sound.stop(tween);
+                removed.push(*handle);
+                false
+            } else {
+                true
+            }
+        });
+        self.emitters.remove(&emitter);
+        Ok(removed)
+    }
+
+    /// Rejects the master bus and buses still referenced by other routing nodes.
+    pub fn destroy_bus(&mut self, bus: AudioBusHandle) -> Result<Vec<PlaybackHandle>> {
+        ensure!(bus != self.master_bus(), "cannot destroy master bus");
+        ensure!(self.buses.contains_key(&bus), "bus not found: {bus:?}");
+        ensure!(!self.buses.values().any(|state| state.output == Some(bus)),
+            "bus still has child buses: {bus:?}");
+        ensure!(!self.emitters.values().any(|state| state.output == bus || state.sends.contains(&bus)),
+            "bus is still referenced by an emitter: {bus:?}");
+        let tween = make_tween(0.0)?;
+        let mut removed = Vec::new();
+        self.playbacks.retain(|handle, entry| {
+            if matches!(&entry.target, PlaybackTarget::Bus(target) if *target == bus) {
+                entry.sound.stop(tween);
+                removed.push(*handle);
+                false
+            } else {
+                true
+            }
+        });
+        self.buses.remove(&bus);
+        Ok(removed)
     }
 
     pub fn shutdown(self){

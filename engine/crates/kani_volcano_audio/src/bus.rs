@@ -19,6 +19,7 @@ pub struct AudioBusHandle(pub usize);
 
 
 pub struct BusState{
+    pub(crate) output: Option<AudioBusHandle>,
     pub track: BusTrack,
     pub volume: f32,
     pub muted: bool,
