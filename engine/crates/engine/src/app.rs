@@ -55,11 +55,11 @@ impl App {
         // load data
         let mut resources = Resources::default();
 
-        // audio bus(0) = master bus
-        let master_bus_id=resources.register_audio_bus(
+        // Register the backend master bus by name.
+        resources.register_audio_bus(
             "master",
             audio_system.master_bus(),
-        );
+        )?;
 
         let primitive_meshes = create_primitive_meshes(&mut renderer, &mut resources)?;
         resources.set_primitive_meshes(primitive_meshes);

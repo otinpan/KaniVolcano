@@ -8,6 +8,7 @@
 
 mod basic_3d_scene;
 mod basic_field_scene;
+mod audio_scene;
 use anyhow::Result;
 use basic_3d_scene::Basic3dScene;
 pub use basic_field_scene::{BasicFieldScene, ChangeSceneCommand};
