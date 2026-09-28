@@ -131,38 +131,53 @@
 	- system/asset_load_system.rs: schedulerから呼ばれる処理を非同期、別スレッドで -> Resourcesでまとめて登録
 	- system/asset_load_command.rs: コマンドを定義
 	- api/asset_load_api.rs: Contextからのロード要求・状態確認
-* サウンド機能
-1. 音声出力とアセット管理- 音声バックエンドの初期化・終了
-- 音声ファイルの読み込み・登録、AudioAssetId
-- 非同期ロードとの接続
+* ~~サウンド機能~~
+```
+create_cuboid()でMeshを登録
+create_emitter()でEmitterを登録
+load_audio()でaudioを登録
+といった、1フレーム後に完了する処理の後に、
+spawn_cuboid()
+context.add_component(entity, Audio{})
+```
 
-2. 基本的な再生制御- BGM・効果音の再生、停止、一時停止、再開
-- 音量、ループ
-- 再生単位の PlaybackHandle
-- AudioApi → 命令キュー → 音声バックエンド
+```rust
+fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+    // 要求ごとに、完了を確認するためのTicketを返す
+    let mesh = context.request_cuboid_mesh(mesh_settings)?;
+    let emitter = context.request_emitter(emitter_settings)?;
+    let audio = context.request_audio("neko", path)?;
 
-3. Entityとの連携- AudioSource：アセット、音量、ループ、空間音響設定
-- AudioSystem：Componentの変更を再生側へ反映
-- Entity削除時の停止・後始末
-- BGMなどはEntityなしでも再生可能にする
+    let position = self.position;
 
-4. Bus- AudioBusId
-- Master・Music・SFXの音量管理
-- 音源の出力先Bus指定
+    context.defer_until_ready("spawn_audio_object", move |ctx| {
+        let mesh_id = match mesh.poll(ctx)? {
+            Poll::Pending => return Ok(Poll::Pending),
+            Poll::Ready(id) => id,
+        };
+        let emitter_id = match emitter.poll(ctx)? {
+            Poll::Pending => return Ok(Poll::Pending),
+            Poll::Ready(id) => id,
+        };
+        let audio_id = match audio.poll(ctx)? {
+            Poll::Pending => return Ok(Poll::Pending),
+            Poll::Ready(id) => id,
+        };
 
-5. 3D音響- AudioListenerとTransformで聴く位置・向きを指定
-- AudioSourceのTransformから音源位置を取得
-- 基本の距離減衰・左右の定位
-- ユーザーSystemによるListener移動・減衰設定の変更
-- 独自計算を使う場合は標準の減衰を無効化可能にする
+        // 全部揃ってから、一度だけ生成する
+        let entity = spawn_cuboid(ctx, mesh_id, position)?;
+        ctx.add_component(entity, AudioSource {
+            audio: audio_id,
+            emitter: Some(emitter_id),
+            settings: PlaybackSettings::default(),
+        });
 
-6. 生成音源- パルス波などの波形生成
-- 外部生成PCMの連続再生
-- 将来のNES音源との接続
+        Ok(Poll::Ready(()))
+    });
 
-7. 残響・音響効果- リバーブBusと音源ごとの送信量
-- フィルター、滑らかなパラメータ変更
-- ユーザーSystemが部屋・遮蔽物などから効果を制御
+    Ok(())
+}
+```
 
 * 共通スレッドプール
 * セーブ・ファイル機能
