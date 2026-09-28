@@ -189,6 +189,13 @@ impl AudioCommandSystem{
 
                     system.set_bus_volume(handle, volume, fade_seconds)?;
                 }
+                AudioCommand::SetBusPanning { bus, panning, fade_seconds } =>{
+                    let handle=resources
+                        .get_audio_bus_handle(bus)
+                        .ok_or_else(||anyhow!("audio bus not found: {bus:?}"))?;
+
+                    system.set_bus_panning(handle, panning, fade_seconds)?;
+                }
                 AudioCommand::SetBusReverb { bus, settings, fade_seconds } =>{
                     let handle=resources
                         .get_audio_bus_handle(bus)
@@ -218,6 +225,7 @@ fn bus_settings_to_descriptor(
     resources: &Resources,
 ) -> Result<AudioBusDescriptor>{
     let volume=settings.volume;
+    let panning=settings.panning;
     let kind=match settings.bus_type{
         AudioBusType::Sub { output } => {
             let output_handle=resources.get_audio_bus_handle(output)
@@ -229,7 +237,7 @@ fn bus_settings_to_descriptor(
         AudioBusType::Reverb{ settings } => AudioBusKind::Reverb{settings}
     };
 
-    Ok(AudioBusDescriptor { volume, kind })
+    Ok(AudioBusDescriptor { volume, panning, kind })
 }
 
 

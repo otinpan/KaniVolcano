@@ -1,16 +1,13 @@
 use anyhow::{Result,ensure,anyhow};
 use std::time::Duration;
 use kira::{
-    Tween,
-    effect::reverb::{
-        ReverbHandle,
-    },
-    track::{
-        TrackHandle, SendTrackHandle,
+    Tween, effect::{panning_control::PanningControlHandle, reverb::ReverbHandle}, track::{
+        SendTrackHandle, TrackHandle,
     }
 };
 pub struct AudioBusDescriptor {
     pub volume: f32,
+    pub panning: f32,
     pub kind: AudioBusKind,
 }
 
@@ -23,6 +20,7 @@ pub struct BusState{
     pub track: BusTrack,
     pub volume: f32,
     pub muted: bool,
+    pub panning: PanningControlHandle,
 }
 
 pub enum BusTrack{

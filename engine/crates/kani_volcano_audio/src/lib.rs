@@ -5,12 +5,14 @@ use kira::{
     AudioManager,
     AudioManagerSettings,
     DefaultBackend,
+    Panning,
     sound::static_sound::{
         StaticSoundData,
     },
     sound::{PlaybackState},
     effect::{
         reverb::{ReverbBuilder},
+        panning_control::{PanningControlBuilder},
     },
     track::{
         TrackBuilder, SendTrackBuilder,
@@ -53,10 +55,10 @@ pub struct AudioSystem{
 
 impl AudioSystem{
     pub fn new() -> Result<Self> {
-        let manager =
-            AudioManager::<DefaultBackend>::new(
-                AudioManagerSettings::default(),
-            )?;
+        let mut settings = AudioManagerSettings::<DefaultBackend>::default();
+        let master_panning = settings.main_track_builder
+            .add_effect(PanningControlBuilder::default());
+        let manager = AudioManager::<DefaultBackend>::new(settings)?;
 
         let mut buses = HashMap::new();
         buses.insert(
@@ -64,6 +66,7 @@ impl AudioSystem{
             BusState{
                 output: None,
                 track: BusTrack::Master,
+                panning: master_panning,
                 volume: 1.0,
                 muted: false,
             },
@@ -257,14 +260,18 @@ impl AudioSystem{
             .ok_or_else(|| anyhow!("bus handle ID exhausted"))?;
 
         let volume=gain_to_decibels(descriptor.volume)?;
+        ensure!(descriptor.panning.is_finite() && (-1.0..=1.0).contains(&descriptor.panning),
+            "panning must be between -1.0 and 1.0");
+        let panning_builder = PanningControlBuilder(kira::Panning(descriptor.panning).into());
 
         let output = match &descriptor.kind {
             AudioBusKind::Sub { output } => Some(*output),
             AudioBusKind::Reverb { .. } => None,
         };
-        let track=match descriptor.kind{
+        let (track, panning)=match descriptor.kind{
             AudioBusKind::Sub{output} =>{
-                let builder=TrackBuilder::new().volume(volume);
+                let mut builder=TrackBuilder::new().volume(volume);
+                let panning = builder.add_effect(panning_builder);
 
                 let target=self.buses.get_mut(&output)
                     .ok_or_else(|| anyhow!(
@@ -285,7 +292,7 @@ impl AudioSystem{
                     }
                 };
 
-                BusTrack::Sub(track)
+                (BusTrack::Sub(track), panning)
             }
             AudioBusKind::Reverb{settings} =>{
                 settings.validate()?;
@@ -299,14 +306,16 @@ impl AudioSystem{
                         .mix(1.0),
                 );
 
+                let panning = builder.add_effect(panning_builder);
                 let track=self.manager.add_send_track(builder)?;
 
-                BusTrack::Reverb{track,effect}
+                (BusTrack::Reverb{track,effect}, panning)
             }
         };
 
         let handle=AudioBusHandle(self.next_bus_id);
         self.buses.insert(handle, BusState {
+            panning,
             output,
             track,
             volume: descriptor.volume,
@@ -315,6 +324,21 @@ impl AudioSystem{
         self.next_bus_id=next;
 
         Ok(handle)
+    }
+
+    pub fn set_bus_panning(
+        &mut self,
+        bus: AudioBusHandle,
+        panning: f32,
+        fade_seconds: f32,
+    ) -> Result<()> {
+        ensure!(panning.is_finite() && (-1.0..=1.0).contains(&panning),
+            "panning must be between -1.0 and 1.0");
+        let tween = make_tween(fade_seconds)?;
+        let state = self.buses.get_mut(&bus)
+            .ok_or_else(|| anyhow!("audio bus not found: {bus:?}"))?;
+        state.panning.set_panning(kira::Panning(panning), tween);
+        Ok(())
     }
 
     pub fn set_bus_volume(

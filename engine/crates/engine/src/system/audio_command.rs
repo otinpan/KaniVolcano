@@ -10,6 +10,7 @@ use crate::resources::{
 #[derive(Debug)]
 pub struct AudioBusSettings{
     pub volume: f32,
+    pub panning: f32,
     pub bus_type: AudioBusType,
 }
 
@@ -89,6 +90,11 @@ pub enum AudioCommand{
         volume: f32,
         fade_seconds: f32,
     },
+    SetBusPanning{
+        bus: AudioBusId,
+        panning: f32,
+        fade_seconds: f32,
+    },
     SetBusReverb{
         bus: AudioBusId,
         settings: ReverbSettings,
@@ -112,6 +118,9 @@ pub struct AudioCommandQueue{
 }
 
 impl AudioCommandQueue{
+    pub fn set_bus_panning(&mut self, bus: AudioBusId, panning: f32, fade_seconds: f32) {
+        self.commands.push(AudioCommand::SetBusPanning { bus, panning, fade_seconds });
+    }
     pub fn destroy_emitter(&mut self, emitter: AudioEmitterId) {
         self.commands.push(AudioCommand::DestroyEmitter { emitter });
     }

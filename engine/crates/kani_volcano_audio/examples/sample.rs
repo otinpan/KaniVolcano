@@ -15,6 +15,7 @@ fn main() -> Result<()>{
     let mid_bus=system.create_bus(
         AudioBusDescriptor { 
             volume: 0.5,
+            panning: -1.0,
             kind: AudioBusKind::Sub{output: system.master_bus()}
         }
     )?;
@@ -22,6 +23,7 @@ fn main() -> Result<()>{
     let reverb_bus=system.create_bus(
         AudioBusDescriptor { 
             volume: 0.9,
+            panning: 1.0,
             kind: AudioBusKind::Reverb { 
                 settings: kani_volcano_audio::ReverbSettings { 
                     feedback: 0.9,
@@ -36,6 +38,7 @@ fn main() -> Result<()>{
     let small_bus=system.create_bus(
         AudioBusDescriptor {
             volume: 0.3,
+            panning: 0.0,
             kind: AudioBusKind::Sub{output: mid_bus}
         }
     )?;
@@ -43,6 +46,7 @@ fn main() -> Result<()>{
     let large_bus=system.create_bus(
         AudioBusDescriptor { 
             volume: 1.0, 
+            panning: 0.0,
             kind: AudioBusKind::Sub{output: mid_bus}
         }
     )?;
@@ -52,7 +56,7 @@ fn main() -> Result<()>{
         EmitterSettings{
             output: mid_bus,
             volume: 1.0,
-            panning: -1.0,
+            panning: 0.0,
             sends: vec![
                 AudioSend{
                     bus: reverb_bus,
@@ -66,7 +70,7 @@ fn main() -> Result<()>{
         EmitterSettings { 
             output: mid_bus, 
             volume: 1.0, 
-            panning: 1.0, 
+            panning: 0.0, 
             sends: vec![
                 AudioSend{
                     bus: reverb_bus,
