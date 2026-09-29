@@ -6,15 +6,11 @@
     clippy::unnecessary_wraps
 )]
 
-mod basic_3d_scene;
-mod basic_field_scene;
-mod audio_scene;
+
 use anyhow::Result;
-use basic_3d_scene::Basic3dScene;
-pub use basic_field_scene::{BasicFieldScene, ChangeSceneCommand};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_engine::{App, EngineConfig, run};
-
+use basic_3d::{Basic3dScene, BasicFieldScene,AudioScene};
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
@@ -29,6 +25,7 @@ fn main() -> Result<()> {
             load_assets(app)?;
             app.add_scene(Basic3dScene::default())?;
             app.add_scene(BasicFieldScene::default())?;
+            app.add_scene(AudioScene::default())?;
             app.set_current_scene("Basic3dScene")?;
             Ok(())
         },
@@ -42,7 +39,11 @@ fn load_assets(app: &mut App) -> Result<()> {
         load_textures(app)?;
         load_skybox_textures(app)?;
         load_fonts(app)?;
+        // audio
+        app.load_audio("neko", "assets/sounds/sample_sound.mp3")?;
+        app.load_audio("flog", "assets/sounds/sample_sound2.mp3")?;
     }
+
     Ok(())
 }
 

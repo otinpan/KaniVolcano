@@ -166,6 +166,7 @@ version = "0.2.1"
 dependencies = [
  "anyhow",
  "cgmath",
+ "kani-volcano-audio",
  "kani-volcano-engine",
  "kani-volcano-math",
  "log",

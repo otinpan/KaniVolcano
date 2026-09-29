@@ -72,7 +72,7 @@ let hello_world=context.spawn_text_3d(
 ```
 
 ## ver0.2.1
-Complete `LoadAssetApi` which load assets using worker thread.
+Create `LoadAssetApi` which load assets using worker thread.
 ```rust
 context.request_load_model(
     "viking_room_lit3d",
@@ -81,3 +81,12 @@ context.request_load_model(
     true,
 );
 ```
+
+## ver0.3.0
+Create AudioSystem.
+* Load audio
+* Create bus
+* Create emitter
+* Play, Pause, Resume, Stop audio
+
+By using emitters and buses, you can apply different panning and volume settings to the same audio source through separate signal paths.

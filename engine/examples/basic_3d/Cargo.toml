@@ -9,5 +9,6 @@ cgmath.workspace = true
 pretty_env_logger.workspace = true
 kani_volcano_engine = { package = "kani-volcano-engine", path = "../../crates/engine" }
 kani_volcano_math = { package = "kani-volcano-math", path = "../../crates/kani_volcano_math" }
+kani_volcano_audio = { package = "kani-volcano-audio", path = "../../crates/kani_volcano_audio" }
 winit.workspace = true
 log.workspace=true

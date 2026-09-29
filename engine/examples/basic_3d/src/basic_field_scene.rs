@@ -106,7 +106,7 @@ impl BasicFieldScene {
             KeyCode::Space,
             InputTrigger::Pressed,
             ChangeSceneCommand {
-                next_scene: "Basic3dScene".to_string(),
+                next_scene: "AudioScene".to_string(),
             },
         );
         context.bind_input_command(
