@@ -54,7 +54,9 @@ impl Basic3dScene {
         let success = context.add_component(
             camera,
             Camera {
-                target: vec3(0.0, 0.0, 0.0),
+                up: vec3(0.0, 0.0, 1.0),
+                // A valid initial direction is needed before CameraSystem's first update.
+                target: vec3(-1.0, 0.0, 0.0),
                 fov_y: 45.0,
                 near: 0.1,
                 far: 100.0,

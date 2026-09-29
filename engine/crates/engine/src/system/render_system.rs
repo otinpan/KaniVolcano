@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use cgmath::vec3;
 use kani_volcano_math::Transform;
 use renderer_vulkan::{
     RenderCamera, RenderItem, SkyboxTextureHandle, VulkanRenderer,
@@ -192,14 +191,14 @@ impl RenderSystem {
             context
                 .query2::<Transform, Camera>()
                 .next()
-                .map(|(_, transform, camera)| RenderCamera {
+                .map(|(_, transform, camera)| -> Result<RenderCamera> { Ok(RenderCamera {
                     position: transform.position,
                     target: camera.target,
-                    up: vec3(0.0, 0.0, 1.0),
+                    up: camera.view_up(transform.position)?,
                     fov_y: camera.fov_y,
                     near: camera.near,
                     far: camera.far,
-                });
+                }) }).transpose()?;
 
         if let Some(render_camera) = render_camera {
             context.set_camera(render_camera);
