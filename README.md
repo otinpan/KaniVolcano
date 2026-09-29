@@ -58,9 +58,7 @@ fn main() -> Result<()> {
 ```
 
 ## Roadmap
-
-- Font rendering
-- Sound support
-- Collision systems
+- Multi thread system
+- Debug systems
 - Physics systems
 - Shader extension APIs
