@@ -15,16 +15,6 @@ pub trait AudioApi: AssetApi {
 
     fn audio_commands_mut(&mut self) -> &mut AudioCommandQueue;
 
-    fn set_bus_panning(&mut self, bus: &str, panning: f32, fade_seconds: f32) -> Result<()>{
-        let id=self.audio_bus_id(bus)?;
-
-        self.audio_commands_mut().set_bus_panning(id, panning, fade_seconds);
-
-        Ok(())
-    }
-    fn set_bus_panning_from_id(&mut self, bus: AudioBusId, panning: f32, fade_seconds: f32){
-        self.audio_commands_mut().set_bus_panning(bus,panning,fade_seconds);
-    }
 
     fn destroy_emitter(&mut self, emitter: &str) -> Result<()> {
         let id=self.audio_emitter_id(emitter)?;
@@ -140,6 +130,17 @@ pub trait AudioApi: AssetApi {
     }
     fn set_bus_volume_from_id(&mut self, bus: AudioBusId, volume: f32, fade_seconds: f32){
         self.audio_commands_mut().set_bus_volume(bus, volume, fade_seconds);
+    }
+
+    fn set_bus_panning(&mut self, bus: &str, panning: f32, fade_seconds: f32) -> Result<()>{
+        let id=self.audio_bus_id(bus)?;
+
+        self.audio_commands_mut().set_bus_panning(id, panning, fade_seconds);
+
+        Ok(())
+    }
+    fn set_bus_panning_from_id(&mut self, bus: AudioBusId, panning: f32, fade_seconds: f32){
+        self.audio_commands_mut().set_bus_panning(bus,panning,fade_seconds);
     }
 
     fn set_bus_reverb(&mut self, bus: &str, settings: ReverbSettings, fade_seconds: f32) -> Result<()> {

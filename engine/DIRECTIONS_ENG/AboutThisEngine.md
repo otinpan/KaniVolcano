@@ -130,7 +130,8 @@ impl Basic3dScene {
         context.add_component(
             camera,
             Camera {
-                target: vec3(0.0, 0.0, 0.0),
+                target: vec3(-5.0, 0.0, 0.0),
+                up: vec3(0.0,0.0,1.0),
                 fov_y: 45.0,
                 near: 0.1,
                 far: 100.0,
@@ -303,7 +304,8 @@ context.add_component(camera, Transform::default());
 context.add_component(
     camera,
     Camera {
-        target: vec3(0.0, 0.0, 0.0),
+        target: vec3(-5.0, 0.0, 0.0),
+        up: vec3(0.0,0.0,1.0),
         fov_y: 45.0,
         near: 0.1,
         far: 100.0,

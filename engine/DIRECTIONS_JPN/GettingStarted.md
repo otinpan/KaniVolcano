@@ -64,7 +64,8 @@ impl Scene for TutorialScene{
         context.add_component(
             camera,
             Camera{
-                target: vec3(0.0,0.0,0.0),
+                target: vec3(-5.0,0.0,0.0),
+                up: vec3(0.0,0.0,1.0),
                 fov_y: 45.0,
                 near: 0.1, // if objects are within `near`, they are not rendered.
                 far: 100.0, // if objects are far than `far`, they are not rendered.
@@ -110,7 +111,8 @@ context.add_component(
 context.add_component(
     camera,
     Camera{
-        target: vec3(0.0,0.0,0.0),
+        target: vec3(-5.0,0.0,0.0),
+        up: vec3(0.0,0.0,1.0),
         fov_y: 45.0,
         near: 0.1, // if objects are within `near`, they are not rendered.
         far: 100.0, // if objects are far than `far`, they are not rendered.
@@ -589,7 +591,8 @@ impl TutorialScene{
         context.add_component(
             camera,
             Camera{
-                target: vec3(0.0,0.0,0.0),
+                target: vec3(-5.0,0.0,0.0),
+                up: vec3(0.0,0.0,1.0),
                 fov_y: 45.0,
                 near: 0.1, // if objects are within `near`, they are not rendered.
                 far: 100.0, // if objects are far than `far`, they are not rendered.
