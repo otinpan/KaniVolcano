@@ -132,54 +132,108 @@
 	- system/asset_load_command.rs: コマンドを定義
 	- api/asset_load_api.rs: Contextからのロード要求・状態確認
 * ~~サウンド機能~~
+* アニメーションシステム
+* 共通スレッドプール
+	- fiber base job system
+	- semapho
+	- 依存関係と、停止再開
+	- jobがキックされると、ジョブはキューに置かれる
+	- ワーカスレッドが解放されると、新しいジョブがキューから実行に移る
+	- ジョブを実行するために、未使用のファイバーがキューから取り出される
+	- ワーカスレッドはSwitchToFiber()でジョブを開始
+	- ジョブがカウンタを使って、待機に入ると、ジョブはスリープ状態に置かれる
+	- ファイバーは紐づけられたカウンタの情報と一緒に待機リストに入る
+	- カウンタがゼロになったら、ジョブは中断したところから再開
+	- ジョブのスリープと再開は、ジョブ自身のファイバーと、各コアにあるジョブシステムの管理ファイバー間で、SwitchToFiber()を呼ぶことで実現
 ```
-create_cuboid()でMeshを登録
-create_emitter()でEmitterを登録
-load_audio()でaudioを登録
-といった、1フレーム後に完了する処理の後に、
-spawn_cuboid()
-context.add_component(entity, Audio{})
+Job System
+│
+├─ Worker Thread 0
+│   ├─ Manager Fiber
+│   └─ Job Fibers
+│
+├─ Worker Thread 1
+│   ├─ Manager Fiber
+│   └─ Job Fibers
+│
+├─ Ready Job Queue
+├─ Free Fiber Queue
+├─ Ready Fiber Queue
+│
+└─ Waiting List
+    ├─ Fiber A → Counter X
+    ├─ Fiber D → Counter Y
+    └─ Fiber F → Counter X
 ```
-
+```
+Main Thread
+│
+├─ Input Stage
+│
+├─ Command Stage
+│
+├─ Update Stage
+│    │
+│    ├─ ECS Scheduler
+│    │     ↓
+│    │  dependency/access graph
+│    │     ↓
+│    │  Fiber Job System
+│    │     ↓
+│    │  Worker Threads
+│    │
+│    └─ local commandsをmerge
+│
+├─ Fixed Update Stage
+│    └─ 同じJob System
+│
+├─ Asset Registration Stage
+│
+├─ Audio Command Stage
+│
+├─ Render Preparation
+│
+└─ Render Stage
+       ↓
+    Vulkan
+```
 ```rust
-fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
-    // 要求ごとに、完了を確認するためのTicketを返す
-    let mesh = context.request_cuboid_mesh(mesh_settings)?;
-    let emitter = context.request_emitter(emitter_settings)?;
-    let audio = context.request_audio("neko", path)?;
+fn update(&mut self, context: &mut UpdateContext<'_>) -> Result<()> {
+    // component を借りる前に、所有できる executor handle を取得
+    let jobs = context.jobs();
+    let dt = context.delta_seconds();
 
-    let position = self.position;
+    let mut entries: Vec<_> = context
+        .query2_mut_mut::<Transform, MoveRotateComponent>()
+        .collect();
 
-    context.defer_until_ready("spawn_audio_object", move |ctx| {
-        let mesh_id = match mesh.poll(ctx)? {
-            Poll::Pending => return Ok(Poll::Pending),
-            Poll::Ready(id) => id,
-        };
-        let emitter_id = match emitter.poll(ctx)? {
-            Poll::Pending => return Ok(Poll::Pending),
-            Poll::Ready(id) => id,
-        };
-        let audio_id = match audio.poll(ctx)? {
-            Poll::Pending => return Ok(Poll::Pending),
-            Poll::Ready(id) => id,
-        };
+    jobs.scope(|scope| {
+		// job1の前半処理
+		prepare();
 
-        // 全部揃ってから、一度だけ生成する
-        let entity = spawn_cuboid(ctx, mesh_id, position)?;
-        ctx.add_component(entity, AudioSource {
-            audio: audio_id,
-            emitter: Some(emitter_id),
-            settings: PlaybackSettings::default(),
-        });
+        let group = scope.group();
 
-        Ok(Poll::Ready(()))
-    });
+        for chunk in entries.chunks_mut(256) {
+            scope.spawn(&group, move || {
+                for (_, transform, movement) in chunk {
+                    update_entity(transform, movement, dt);
+                }
+            });
+        }
 
+        scope.wait(&group); // job1 wait for finish other jobs
+
+		// 他のjobの結果を使う処理
+		finish(); // job1 resume
+
+    }); // wait を省略しても、scope 終了時には全 job を待つ
+
+    drop(entries);
+
+    // Context を使う処理を再開
     Ok(())
 }
 ```
-
-* 共通スレッドプール
 * セーブ・ファイル機能
 	- ユーザ定義データの保存、復元
 * デバッグ機能

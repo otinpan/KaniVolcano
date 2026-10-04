@@ -979,6 +979,7 @@ dependencies = [
  "kani-volcano-text",
  "log",
  "renderer_vulkan",
+ "windows-sys 0.61.2",
  "winit",
 ]
 

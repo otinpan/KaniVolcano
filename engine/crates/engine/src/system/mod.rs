@@ -19,6 +19,7 @@ mod asset_load_system;
 mod asset_load_command;
 mod audio_command_system;
 mod audio_command;
+mod job;
 
 pub use api::{
     AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi,

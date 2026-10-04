@@ -188,7 +188,7 @@ impl Registry {
         assert_ne!(
             TypeId::of::<A>(),
             TypeId::of::<B>(),
-            "query2_mut_mut cannot borrow the same component type mutably twice"
+            "query2_mut cannot borrow the same component type as both mutable and immutable"
         );
 
         let registry = self as *mut Registry;
@@ -225,7 +225,7 @@ impl Registry {
         assert_ne!(
             TypeId::of::<A>(),
             TypeId::of::<B>(),
-            "query2_mut cannot borrow the same component type as both mutable and immutable"
+            "query2_mut_mut cannot borrow the same component type mutably twice"
         );
 
         let registry = self as *mut Registry;
@@ -447,5 +447,51 @@ mod tests {
                 .rotation,
             vec3(0.0, 0.0, 0.0)
         );
+    }
+
+    #[test]
+    fn query2_mut_mut_can_split_distinct_entities_across_threads() {
+        let mut registry = Registry::default();
+        let entities: Vec<_> = (0..64)
+            .map(|_| {
+                let entity = registry.create();
+                registry.add_component(entity, Transform::default());
+                registry.add_component(
+                    entity,
+                    Rotator {
+                        speed: vec3(1.0, 0.0, 0.0),
+                    },
+                );
+                entity
+            })
+            .collect();
+
+        let mut entries: Vec<_> = registry.query2_mut_mut::<Transform, Rotator>().collect();
+        assert_eq!(entries.len(), entities.len());
+
+        std::thread::scope(|scope| {
+            for chunk in entries.chunks_mut(16) {
+                scope.spawn(move || {
+                    for (_, transform, rotator) in chunk {
+                        transform.rotate(rotator.speed);
+                    }
+                });
+            }
+        });
+        drop(entries);
+
+        for entity in entities {
+            assert_eq!(
+                registry.get_component::<Transform>(entity).unwrap().rotation,
+                vec3(1.0, 0.0, 0.0)
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "query2_mut_mut cannot borrow the same component type mutably twice")]
+    fn query2_mut_mut_rejects_the_same_component_type() {
+        let mut registry = Registry::default();
+        let _ = registry.query2_mut_mut::<Transform, Transform>();
     }
 }
