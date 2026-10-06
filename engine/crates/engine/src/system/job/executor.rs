@@ -1,188 +1,170 @@
+use super::JobSystemShared;
 use super::fiber::{FiberHandle, FiberId};
 use super::group::JobGroup;
-use super::{Job, JobSystemShared};
+use anyhow::{Result, anyhow};
 use std::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use windows_sys::Win32::System::Threading::SwitchToFiber;
 
 thread_local! {
-    static CURRENT_EXECUTOR: RefCell<Option<Executor>> =
-        const { RefCell::new(None) };
+    static CURRENT_EXECUTOR: RefCell<Option<Executor>> = const { RefCell::new(None) };
 }
-
-// Fiber switches must happen outside this closure, after the TLS borrow ends.
+// The TLS borrow must end before any fiber switch.
 fn with_current_executor<R>(f: impl FnOnce(&mut Executor) -> R) -> R {
-    CURRENT_EXECUTOR.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        let executor = slot.as_mut().expect("current thread has no Executor");
-        f(executor)
-    })
+    CURRENT_EXECUTOR.with(|slot| f(slot.borrow_mut().as_mut().expect("no current Executor")))
 }
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct WorkerId(pub usize);
-pub struct Worker {
-    thread: JoinHandle<()>,
+pub(crate) struct WorkerId(pub usize);
+pub(crate) struct Worker {
+    thread: JoinHandle<Result<()>>,
 }
-pub struct Executor {
-    worker_id: WorkerId,          // worker thread id
-    shared: Arc<JobSystemShared>, // thraed shared JobSystem
-
+pub(crate) struct Executor {
+    worker_id: WorkerId,
+    shared: Arc<JobSystemShared>,
+    // Thread-affine: created and destroyed only within this worker.
     manager_fiber: FiberHandle,
     current_fiber: Option<FiberId>,
 }
-
-impl Executor {
-    pub fn new(
-        worker_id: WorkerId,
-        shared: Arc<JobSystemShared>,
-        manager_fiber: FiberHandle,
-    ) -> Self {
-        Self {
-            worker_id,
-            shared,
-            manager_fiber,
-            current_fiber: None,
+impl Worker {
+    pub(crate) fn start(id: WorkerId, shared: Arc<JobSystemShared>) -> Result<Self> {
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let thread = std::thread::Builder::new()
+            .name(format!("job-worker-{}", id.0))
+            .spawn(move || -> Result<()> {
+                let manager = match unsafe { FiberHandle::manager_fiber_from_thread() } {
+                    Ok(manager) => manager,
+                    Err(error) => {
+                        let _ = ready_tx.send(Err(error.to_string()));
+                        return Err(error);
+                    }
+                };
+                let executor = Executor {
+                    worker_id: id,
+                    shared,
+                    manager_fiber: manager,
+                    current_fiber: None,
+                };
+                // Install TLS before acknowledging successful startup.
+                CURRENT_EXECUTOR.with(|slot| {
+                    assert!(slot.borrow().is_none());
+                    *slot.borrow_mut() = Some(executor);
+                });
+                let _ = ready_tx.send(Ok(()));
+                Executor::run()
+            })?;
+        match ready_rx.recv() {
+            Ok(Ok(())) => Ok(Self { thread }),
+            startup => {
+                let _ = thread.join();
+                Err(anyhow!("worker startup failed: {startup:?}"))
+            }
         }
     }
-
-    // Call on the worker thread that owns manager_fiber, while on that fiber.
-    pub fn run(self) {
-        CURRENT_EXECUTOR.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            assert!(slot.is_none(), "Executor already installed");
-            *slot = Some(self);
-        });
-
+    pub(crate) fn join(self) -> Result<()> {
+        self.thread.join().map_err(|_| anyhow!("worker panicked"))?
+    }
+}
+impl Executor {
+    fn run() -> Result<()> {
         loop {
-            if with_current_executor(|executor| executor.shared.is_shutdown()) {
+            let shared = Self::current_shared();
+            if shared.is_shutdown() {
                 break;
             }
-
-            let next = with_current_executor(|executor| executor.next_ready_fiber());
-            if let Some(fiber_id) = next {
-                // Queue/state management must provide exclusive execution ownership.
+            shared.process_wake_requests();
+            if let Some(id) = shared.next_ready_fiber() {
                 unsafe {
-                    Self::resume_fiber(fiber_id);
+                    Self::resume_fiber(id);
                 }
             } else {
-                std::thread::yield_now();
+                shared.wait_for_work();
             }
         }
-
         let executor = CURRENT_EXECUTOR
             .with(|slot| slot.borrow_mut().take())
-            .expect("current thread has no Executor");
-        unsafe {
-            executor
-                .manager_fiber
-                .convert_back_to_thread()
-                .expect("failed to convert manager fiber back to thread");
-        }
+            .unwrap();
+        unsafe { executor.manager_fiber.convert_back_to_thread() }
     }
-
     /// # Safety
-    /// Call only from the current job fiber. The caller must ensure the waiting
-    /// fiber cannot be resumed by another worker before the switch completes.
-    /// TODO: implement the parking/wakeup handshake in fiber state management.
+    /// Caller must satisfy the complete-stack migration requirements of wait.
     pub(crate) unsafe fn suspend_current_fiber(group: &JobGroup) {
-        let (fiber_id, manager) = with_current_executor(|executor| {
+        let (id, shared, manager) = with_current_executor(|executor| {
             (
-                executor.current_fiber.expect("no current fiber"),
+                executor.current_fiber.expect("wait outside job fiber"),
+                executor.shared.clone(),
                 executor.manager_fiber.as_ptr(),
             )
         });
-
-        if !group.add_waiter(fiber_id) {
+        shared.fiber(id).begin_parking();
+        if !group.add_waiter(id) {
+            shared.fiber(id).cancel_parking();
             return;
         }
-
+        drop(shared);
         unsafe {
             SwitchToFiber(manager);
         }
-        // This job may now run on another worker. Do not reuse the old Executor.
+        // Subsequent TLS access resolves the worker on which we resumed.
     }
-
-    // Only selects/assigns work. Never switches fibers while borrowing Executor.
-    fn next_ready_fiber(&mut self) -> Option<FiberId> {
-        if let Some(fiber_id) = self.shared.pop_ready_fiber() {
-            return Some(fiber_id);
-        }
-
-        let Some(job) = self.shared.pop_ready_job() else {
-            return None;
-        };
-
-        let Some(fiber_id) = self.shared.pop_free_fiber() else {
-            self.shared.push_ready_job(job);
-            return None;
-        };
-
-        self.assign_job(fiber_id, job);
-        Some(fiber_id)
-    }
-
-    // Called on the current worker's manager fiber with exclusive ownership of
-    // the target job fiber. TLS references and guards never cross the switch.
-    unsafe fn resume_fiber(fiber_id: FiberId) {
+    unsafe fn resume_fiber(id: FiberId) {
         let target = with_current_executor(|executor| {
-            assert!(
-                executor.current_fiber.is_none(),
-                "already running a job fiber"
-            );
-            let target = executor.shared.fiber_handle(fiber_id).as_ptr();
-            executor.current_fiber = Some(fiber_id);
-            target
+            assert!(executor.current_fiber.is_none());
+            let fiber = executor.shared.fiber(id);
+            debug_assert_eq!(fiber.id(), id);
+            fiber.prepare_resume();
+            executor.current_fiber = Some(id);
+            fiber.handle().as_ptr()
         });
-
         unsafe {
             SwitchToFiber(target);
         }
-
-        // Execution is back on this worker's manager fiber.
-        with_current_executor(|executor| executor.current_fiber = None);
+        let shared = with_current_executor(|executor| {
+            executor.current_fiber = None;
+            executor.shared.clone()
+        });
+        let fiber = shared.fiber(id);
+        if let Some(ready) = fiber.finish_parking() {
+            if ready {
+                shared.push_ready_fiber(id);
+            }
+            // A Waiting fiber may already be owned by another worker now.
+            return;
+        }
+        let completed = fiber
+            .take_completed()
+            .expect("fiber returned without parking/completion");
+        fiber.recycle();
+        shared.push_free_fiber(id);
+        // Release outstanding only AFTER the original fiber became reusable.
+        shared.complete(completed);
     }
-
-    pub fn current_worker_id() -> WorkerId {
+    pub(crate) fn current_worker_id() -> WorkerId {
         with_current_executor(|executor| executor.worker_id)
     }
-
-    pub fn current_job_fiber() -> Option<FiberId> {
+    pub(crate) fn current_job_fiber() -> Option<FiberId> {
         with_current_executor(|executor| executor.current_fiber)
     }
-
     pub(crate) fn current_shared() -> Arc<JobSystemShared> {
         with_current_executor(|executor| executor.shared.clone())
     }
-
+    pub(crate) fn try_current_shared() -> Option<Arc<JobSystemShared>> {
+        CURRENT_EXECUTOR.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .map(|executor| executor.shared.clone())
+        })
+    }
     /// # Safety
-    /// Call only from the current job fiber. Its execution ownership must not
-    /// be published to another worker until the manager regains control.
+    /// Only the current job fiber may call this. Do not publish its execution
+    /// ownership until the manager has regained control.
     pub(crate) unsafe fn return_to_manager() {
         let manager = with_current_executor(|executor| {
-            assert!(executor.current_fiber.is_some(), "not running a job fiber");
+            assert!(executor.current_fiber.is_some());
             executor.manager_fiber.as_ptr()
         });
         unsafe {
             SwitchToFiber(manager);
         }
-        // A reused fiber may resume on another worker; consult TLS again.
-    }
-
-    fn assign_job(&mut self, fiber_id: FiberId, job: Job) {
-        self.shared.assign_job(fiber_id, job);
-    }
-
-    pub fn current_fiber(&self) -> Option<FiberId> {
-        self.current_fiber
-    }
-
-    pub fn worker_id(&self) -> WorkerId {
-        self.worker_id
-    }
-
-    pub fn manager_fiber(&self) -> &FiberHandle {
-        &self.manager_fiber
     }
 }
