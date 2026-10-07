@@ -234,19 +234,6 @@ fn update(&mut self, context: &mut UpdateContext<'_>) -> Result<()> {
     Ok(())
 }
 ```
-| 遷移 | 条件 | 変更する処理 |
-|---|---|---|
-| `Free → Assigned` | 空き queue から取得した fiber に、新しい Job を保存する | `assign_job()` |
-| `Assigned → Running` | fiber の実行ループが、割り当てられた Job を取り出す | `take_job()` |
-| `Running → Parking` | 実行中の Job が group を待とうとする | `begin_parking()` |
-| `Parking → Running` | group が完了済みで、待機登録が不要だった | `cancel_parking()` |
-| `Parking → Waiting` | manager に戻った時点で、完了通知がまだ処理されていない | `finish_parking()` |
-| `Parking → Ready` | manager に戻った時点で、通知済みの `wake_pending` がある | `finish_parking()` |
-| `Waiting → Ready` | group の全 Job が完了し、wake request を処理する | `request_wakeup()` |
-| `Ready → Running` | worker が再開 queue から取得し、実行権を確保する | `prepare_resume()` |
-| `Running → Finished` | JobTask が戻った、または panic を捕捉して実行結果が確定した | `mark_finished()` |
-| `Finished → Free` | manager に戻り、完了情報を取り出して処理した | `recycle()` |
-* セーブ・ファイル機能
 	- ユーザ定義データの保存、復元
 * デバッグ機能
 	- フレーム計測

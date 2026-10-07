@@ -18,6 +18,7 @@ use std::sync::{
 
 static NEXT_SYSTEM_ID: AtomicUsize = AtomicUsize::new(1);
 
+// env live longer than scope
 pub struct JobScope<'scope, 'env: 'scope> {
     jobs: JobSystemHandle,
     scope_group: JobGroup,
@@ -97,6 +98,8 @@ impl JobSystemHandle {
                 "wait from another JobSystem"
             );
         }
+
+        // after group sealed, jobs can not be pushed into this group
         group.seal(self.shared.id)?;
         unsafe {
             self.wait_internal(group)?;
@@ -232,7 +235,7 @@ struct Scheduler {
     ready: VecDeque<FiberId>,
     free: VecDeque<FiberId>,
     wakes: VecDeque<FiberId>,
-    outstanding: usize,
+    outstanding: usize, // running fibers
     accepting: bool,
 }
 pub(crate) struct JobSystemShared {

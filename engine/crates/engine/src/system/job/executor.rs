@@ -117,8 +117,11 @@ impl Executor {
             fiber.handle().as_ptr()
         });
         unsafe {
+            // return to target fiber
             SwitchToFiber(target);
         }
+
+        // manager fiber
         let shared = with_current_executor(|executor| {
             executor.current_fiber = None;
             executor.shared.clone()

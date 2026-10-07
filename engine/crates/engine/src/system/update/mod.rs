@@ -97,6 +97,8 @@ impl<'a> UpdateContext<'a> {
     }
 }
 
+impl super::api::JobApi for UpdateContext<'_> {}
+
 impl EntityApi for UpdateContext<'_> {
     fn world(&self) -> &World {
         &self.world

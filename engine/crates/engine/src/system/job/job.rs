@@ -5,7 +5,7 @@ pub(crate) type JobTask = Box<dyn FnOnce() + Send + 'static>;
 pub(crate) struct Job {
     task: JobTask,
     pub(crate) group: JobGroup,
-    pub(crate) scope_group: Option<JobGroup>,
+    pub(crate) scope_group: Option<JobGroup>, // tracks all jobs in a scope so the scope waits for them to finish before exiting.
 }
 pub(crate) struct CompletedJob {
     pub(crate) group: JobGroup,

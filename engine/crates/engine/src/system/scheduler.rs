@@ -1,4 +1,5 @@
 use anyhow::Result;
+use super::api::register_job_system;
 use kani_volcano_audio::{
     AudioSystem,
 };
@@ -6,7 +7,7 @@ use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
     UpdateSystem, TextRenderSystem, AssetLoadSystem, AssetLoadCommandQueue, AssetLoadOutcome,
-    AudioCommandQueue, AudioCommandSystem,
+    AudioCommandQueue, AudioCommandSystem, JobSystem,
 };
 
 use crate::{Input, Resources, SceneCommandQueue, Time, World};
@@ -22,6 +23,7 @@ pub struct Scheduler {
     pub text_render_system: TextRenderSystem,
     pub asset_load_system: Option<AssetLoadSystem>,
     pub audio_command_system: AudioCommandSystem,
+    pub job_system: JobSystem,
     pub render_commands: RenderCommandQueue,
     pub asset_load_commands: AssetLoadCommandQueue,
     pub audio_commands: AudioCommandQueue,
@@ -44,6 +46,7 @@ impl Scheduler {
         text_render_system: TextRenderSystem,
         asset_load_system: Option<AssetLoadSystem>,
         audio_command_system: AudioCommandSystem,
+        job_system: JobSystem,
         render_commands: RenderCommandQueue,
         asset_load_commands: AssetLoadCommandQueue,
         audio_commands: AudioCommandQueue,
@@ -56,6 +59,7 @@ impl Scheduler {
             render_system,
             text_render_system,
             asset_load_system,
+            job_system,
             audio_commands,
             render_commands,
             asset_load_commands,
@@ -149,6 +153,7 @@ impl Scheduler {
         resources: &mut Resources,
         scene_commands: &mut SceneCommandQueue,
     ) -> Result<()> {
+        let _jobs_guard = register_job_system(self.job_system.handle());
         let mut context = UpdateContext::new(
             world,
             input,
@@ -176,6 +181,7 @@ impl Scheduler {
         resources: &mut Resources,
         scene_commands: &mut SceneCommandQueue,
     ) -> Result<()>{
+        let _jobs_guard = register_job_system(self.job_system.handle());
         let mut context = UpdateContext::new(
             world,
             input,
@@ -262,12 +268,27 @@ impl Scheduler {
 
 impl Default for Scheduler {
     fn default() -> Self {
+        let parallelism = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+
+        let worker_count = parallelism.saturating_sub(1).max(1);
+        let fiber_count = worker_count * 4;
+        let stack_size = 0;
+
+        let job_system = JobSystem::new(
+            worker_count,
+            fiber_count,
+            stack_size,
+        ).expect("failed to create job system");
+
         Self {
             command_system: CommandSystem,
             input_system: InputSystem::new(),
             render_system: RenderSystem,
             text_render_system: TextRenderSystem::default(),
             asset_load_system: None,
+            job_system,
             audio_command_system: AudioCommandSystem::default(),
             render_commands: RenderCommandQueue::default(),
             asset_load_commands: AssetLoadCommandQueue::default(),

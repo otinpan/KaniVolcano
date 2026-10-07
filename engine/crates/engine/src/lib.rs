@@ -45,7 +45,7 @@ pub use system::{
     UpdatePrimitiveMeshesCommand, UpdateSystem, TextRenderSystem, TextLayout,
     AssetLoadCommand, AssetLoadCommandQueue, AssetLoadSystem, AssetLoadOutcome, AssetKind,
     AudioCommand, AudioCommandQueue, AudioApi, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend,
-    AudioCommandSystem, 
+    AudioCommandSystem, JobSystem, JobSystemHandle, JobApi,
 };
 pub use time::Time;
 pub use kani_volcano_audio::PlaybackSettings;
@@ -53,13 +53,13 @@ pub use world::World;
 
 pub mod prelude {
     pub use crate::{
-        App, AssetApi, AssetLoadApi, AudioApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
+        App, AssetApi, AssetLoadApi, AudioApi, JobApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
-        AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings,
+        AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle,
     };
 
     pub use kani_volcano_math::Transform;

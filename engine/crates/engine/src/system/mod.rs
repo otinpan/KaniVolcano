@@ -22,7 +22,7 @@ mod audio_command;
 mod job;
 
 pub use api::{
-    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi,
+    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi, JobApi,
 };
 pub use command::{
     Command, CommandContext, CommandSystem, CreatePrimitiveCommand, DebugMonitor,
@@ -40,3 +40,4 @@ pub use asset_load_system::{AssetLoadSystem, AssetLoadOutcome, AssetKind};
 pub use asset_load_command::{AssetLoadCommand, AssetLoadCommandQueue};
 pub use audio_command::{AudioCommand, AudioCommandQueue, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend};
 pub use audio_command_system::{AudioCommandSystem};
+pub use job::{JobSystem, JobSystemHandle, JobScope};

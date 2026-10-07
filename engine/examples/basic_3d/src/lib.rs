@@ -9,7 +9,7 @@ pub use component::{
     MoveComponent,SphereColliderComponent, MoveRotateComponent
 };
 pub use system::{
-    AudioSystem, MoveSystem, MoveRotateSystem
+    AudioSystem, MoveSystem, MoveRotateSystem, ParallelRotatorSystem,
 };
 pub use audio_scene::{AudioScene};
 pub use basic_field_scene::{BasicFieldScene, ChangeSceneCommand};
