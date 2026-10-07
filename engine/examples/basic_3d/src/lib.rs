@@ -1,5 +1,6 @@
 mod basic_3d_scene;
 mod basic_field_scene;
+mod parallel_rotator_scene;
 mod audio_scene;
 mod component;
 mod system;
@@ -13,3 +14,4 @@ pub use system::{
 };
 pub use audio_scene::{AudioScene};
 pub use basic_field_scene::{BasicFieldScene, ChangeSceneCommand};
+pub use parallel_rotator_scene::ParallelRotatorScene;

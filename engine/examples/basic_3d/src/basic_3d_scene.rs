@@ -72,7 +72,7 @@ impl Basic3dScene {
         }
     }
     fn add_update_systems(&mut self, context: &mut SceneContext<'_>) {
-        context.add_update_system("rotator", RotatorSystem);
+        context.add_update_system("rotator", RotatorSystem::default());
         context.add_update_system("camera", CameraSystem);
     }
 

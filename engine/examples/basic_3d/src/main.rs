@@ -10,7 +10,7 @@
 use anyhow::Result;
 use kani_volcano_engine::prelude::*;
 use kani_volcano_engine::{App, EngineConfig, run};
-use basic_3d::{Basic3dScene, BasicFieldScene,AudioScene};
+use basic_3d::{Basic3dScene, BasicFieldScene,AudioScene,ParallelRotatorScene};
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
@@ -26,7 +26,9 @@ fn main() -> Result<()> {
             app.add_scene(Basic3dScene::default())?;
             app.add_scene(BasicFieldScene::default())?;
             app.add_scene(AudioScene::default())?;
-            app.set_current_scene("Basic3dScene")?;
+            app.add_scene(ParallelRotatorScene::default())?;
+
+            app.set_current_scene("ParallelRotatorScene")?;
             Ok(())
         },
     )

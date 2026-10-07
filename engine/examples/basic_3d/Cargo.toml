@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+rand = "0.10.0"
 anyhow.workspace = true
 cgmath.workspace = true
 pretty_env_logger.workspace = true

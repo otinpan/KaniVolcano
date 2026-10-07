@@ -1,4 +1,7 @@
 # Turbo engine architecture
+```
+cargo run -p basic_3d
+```
 
 # Turbo Engine TODO
 * ~~`App`、`World`、`Renderer`、`Input`、`Time`の責務を分ける~~
