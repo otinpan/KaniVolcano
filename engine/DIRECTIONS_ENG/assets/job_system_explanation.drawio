@@ -1,0 +1,76 @@
+<mxfile host="65bd71144e">
+    <diagram id="1gzSNo7ZkKOkbva4CGPj" name="Page-1">
+        <mxGraphModel dx="1733" dy="673" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-18" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+                    <mxGeometry height="130" width="390" x="-270" y="255" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="" vertex="1">
+                    <mxGeometry height="130" width="300" x="200" y="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="" vertex="1">
+                    <mxGeometry height="130" width="300" x="200" y="270" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="" vertex="1">
+                    <mxGeometry height="130" width="300" x="200" y="460" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;font style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Worker1 (Thread)&lt;/b&gt;&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="30" width="220" x="230" y="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;font style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Worker2 (Thread)&lt;/b&gt;&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="30" width="220" x="230" y="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;font style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Worker3 (Thread)&lt;/b&gt;&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="30" width="220" x="240" y="430" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobB&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="160" x="265" y="117.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-9" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Fiber2&lt;/b&gt;&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="30" width="130" x="280" y="87.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-10" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobC&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="160" x="270" y="307.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-11" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Fiber3&lt;/b&gt;&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="30" width="130" x="285" y="277.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-12" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobD&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="160" x="-250" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-13" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Fiber4&lt;/b&gt;&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="30" width="130" x="-235" y="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-14" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobA&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="160" x="630" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-15" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Fiber1&lt;/b&gt;&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="30" width="130" x="645" y="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-16" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobE&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="160" x="-77" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-17" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;span style=&quot;font-size: 20px;&quot;&gt;&lt;b&gt;Fiber5&lt;/b&gt;&lt;/span&gt;" vertex="1">
+                    <mxGeometry height="30" width="130" x="-62" y="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-19" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=2;" value="">
+                    <mxGeometry height="50" relative="1" width="50" as="geometry">
+                        <mxPoint x="500" y="540" as="sourcePoint"/>
+                        <mxPoint x="640" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-20" edge="1" parent="1" source="ePnZU_yYhfgCGTA4n_rG-12" style="endArrow=classic;html=1;strokeWidth=2;" value="">
+                    <mxGeometry height="50" relative="1" width="50" as="geometry">
+                        <mxPoint x="20" y="500" as="sourcePoint"/>
+                        <mxPoint x="190" y="530" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="ePnZU_yYhfgCGTA4n_rG-21" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;&lt;font style=&quot;font-size: 20px;&quot;&gt;JobE wait blue group&lt;/font&gt;&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="30" width="230" x="-200" y="460" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
