@@ -90,3 +90,11 @@ Create AudioSystem.
 * Play, Pause, Resume, Stop audio
 
 By using emitters and buses, you can apply different panning and volume settings to the same audio source through separate signal paths.
+
+## ver0.4.0
+Create JobSystem
+* Users can create jobs in systems
+* Execute jobs in parallel using multiple threads
+* Users can profile them
+
+![](../assets/job_system_profiler.png)

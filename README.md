@@ -15,6 +15,12 @@ It is designed around ECS, scenes, and context-based APIs so users can create en
 - Texture and skybox support
 - Input command binding
 - User-defined update systems
+- Audio System
+- Font System
+- Parallel Job System/ Multi Thread
+
+![](assets/tutorial_font3d.png)
+![](assets/job_system_profiler.png)
 
 ## Getting Started
 
@@ -58,7 +64,6 @@ fn main() -> Result<()> {
 ```
 
 ## Roadmap
-- Multi thread system
 - Debug systems
 - Physics systems
 - Shader extension APIs

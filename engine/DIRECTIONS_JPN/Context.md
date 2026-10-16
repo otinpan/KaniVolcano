@@ -164,6 +164,7 @@ EntityAPIを使うことが出来ます。ただ、EntityAPIで使える`spaw()`
 * RenderCommandAPI
 * SceneCommandAPI
 * AssetLoadAPI
+* JobAPI
 
 を使用できます。
 
