@@ -34,10 +34,13 @@ pub use render_command::{RenderCommand, RenderCommandQueue};
 pub use render_system::{RenderContext, RenderSystem};
 pub use scene_command::{SceneCommand, SceneCommandQueue};
 pub use scheduler::Scheduler;
-pub use update::{CameraSystem, RotatorSystem, ScheduledUpdateSystem, UpdateContext, UpdateSystem};
+pub use update::{
+    CameraSystem, RotatorSystem, ScheduledUpdateSystem, ThreadProfilerSystem,
+    UpdateContext, UpdateSystem};
 pub use text_render_system::{TextRenderSystem, TextLayout};
 pub use asset_load_system::{AssetLoadSystem, AssetLoadOutcome, AssetKind};
 pub use asset_load_command::{AssetLoadCommand, AssetLoadCommandQueue};
 pub use audio_command::{AudioCommand, AudioCommandQueue, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend};
 pub use audio_command_system::{AudioCommandSystem};
 pub use job::{JobSystem, JobSystemHandle, JobScope};
+pub use job::{JobId, JobInfo, JobProfiler, JobRunSegment, WorkerHistory, WorkerId, FiberId};

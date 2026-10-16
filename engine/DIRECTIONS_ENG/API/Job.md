@@ -59,7 +59,7 @@ impl UpdateSystem for ParallelRotatorSystem {
                 let group = scope.group();
 
                 for chunk in entries.chunks_mut(256) {
-                    scope.spawn(&group, move || {
+                    scope.spawn(&group, "rotate_chunk", move || {
                         // This closure runs on a worker.
                         for (_, transform, rotator) in chunk {
                             transform.rotate(rotator.speed * dt);
@@ -84,7 +84,7 @@ impl UpdateSystem for ParallelRotatorSystem {
 
 1. `jobs.scope(...)` starts a scope for jobs that borrow data. All jobs submitted through that scope finish before it exits, even if an explicit `wait()` is omitted.
 2. `scope.group()` creates a group that tracks completion of a set of jobs.
-3. `scope.spawn(&group, func)` submits `func` (`FnOnce() + Send`) to the shared job queue and registers it with the group. This example gives each job a disjoint chunk of up to 256 entries.
+3. `scope.spawn(&group, name, func)` submits `func` (`FnOnce() + Send`) to the shared job queue and registers it with the group. `name` labels the job for profiling. Jobs with the same name still have distinct JobIds. This example gives each job a disjoint chunk of up to 256 entries.
 4. `scope.wait(&group)` waits for every job in the group to finish. Waiting seals the group against further submissions; use a new group for subsequent jobs.
 
 For example, to run jobs B, C, and D in parallel after processing A, then use their results in processing E, register B, C, and D in the same group. Run A, submit the child jobs, and run E after `scope.wait(&group)?`. The scope closure itself is not automatically submitted as a job.

@@ -46,6 +46,7 @@ pub use system::{
     AssetLoadCommand, AssetLoadCommandQueue, AssetLoadSystem, AssetLoadOutcome, AssetKind,
     AudioCommand, AudioCommandQueue, AudioApi, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend,
     AudioCommandSystem, JobSystem, JobSystemHandle, JobApi,
+    JobId, JobInfo, JobProfiler, JobRunSegment, WorkerHistory, WorkerId, FiberId,
 };
 pub use time::Time;
 pub use kani_volcano_audio::PlaybackSettings;

@@ -5,7 +5,7 @@
 //! let system = JobSystem::new(1, 1, 0).unwrap();
 //! unsafe { system.handle().scope(|scope| {
 //!     let mut local = 0;
-//!     scope.spawn(&scope.group(), || { local = 1; }).unwrap();
+//!     scope.spawn(&scope.group(), "job", || { local = 1; }).unwrap();
 //! }); }
 //! ```
 //! The scope itself cannot escape:
@@ -19,7 +19,7 @@
 //! use job_runtime_tests::job::{JobSystem, JobGroup};
 //! let system = JobSystem::new(1, 1, 0).unwrap();
 //! let local = 42;
-//! system.handle().spawn(&JobGroup::new(), || { println!("{local}"); });
+//! system.handle().spawn(&JobGroup::new(), "job", || { println!("{local}"); });
 //! ```
 #[path = "../mod.rs"]
 pub mod job;

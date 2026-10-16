@@ -14,7 +14,7 @@ unsafe {
     handle.scope(|scope| {
         let group = scope.group();
         for chunk in values.chunks_mut(128) {
-            scope.spawn(&group, move || chunk.fill(1)).unwrap();
+            scope.spawn(&group, "job", move || chunk.fill(1)).unwrap();
         }
         scope.wait(&group).unwrap();
     })?;
@@ -47,6 +47,38 @@ jobs.shutdown()?;
 - Job failures are retained in their group; `wait` reports the failure count.
   A scoped child failure also makes scope return an error. A body panic is resumed
   after scoped jobs have drained. Cancellation of running jobs is not supported.
+
+## Execution history
+
+Both handle and scope submissions require a name: `spawn(&group, "name", task)`.
+Each job gets a unique per-system `JobId`. Names and IDs are shared through
+`Arc<JobInfo>`; no global name registry is retained.
+
+```rust,ignore
+let handle = jobs.handle();
+let profiler = handle.profiler();
+for index in 0..profiler.worker_count() {
+    let history = profiler.worker_history(index).unwrap();
+    for segment in history.segments() {
+        println!("{:?} {} {:?}..{:?}", segment.job.id, segment.job.name,
+            segment.started_at, segment.ended_at);
+    }
+}
+```
+
+Each worker retains its latest 4,096 completed dispatch intervals. Older entries
+are evicted and counted by `dropped_segments()`. `worker_history()` copies only
+one bounded history, allowing the caller to release the worker lock immediately.
+Replace old copies instead of accumulating them indefinitely.
+
+Times share one monotonic origin and include fiber-switch overhead and any OS
+descheduling while dispatched. They are not OS CPU utilization measurements.
+Suspended intervals are excluded; an ongoing dispatch appears only after it
+returns to the manager. Migrated jobs keep their ID/name across workers, and
+recycled fibers get the newly assigned job's metadata. Recording is currently
+always enabled and adds overhead to each dispatch.
+
+## Tests
 
 Run tests for this module independently of engine dependencies:
 

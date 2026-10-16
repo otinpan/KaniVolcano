@@ -1,6 +1,7 @@
 use super::JobSystemShared;
 use super::fiber::{FiberHandle, FiberId};
 use super::group::JobGroup;
+use super::profiler::JobRunSegment;
 use anyhow::{Result, anyhow};
 use std::cell::RefCell;
 use std::sync::{Arc, mpsc};
@@ -15,7 +16,7 @@ fn with_current_executor<R>(f: impl FnOnce(&mut Executor) -> R) -> R {
     CURRENT_EXECUTOR.with(|slot| f(slot.borrow_mut().as_mut().expect("no current Executor")))
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct WorkerId(pub usize);
+pub struct WorkerId(pub usize);
 pub(crate) struct Worker {
     thread: JoinHandle<Result<()>>,
 }
@@ -108,23 +109,37 @@ impl Executor {
         // Subsequent TLS access resolves the worker on which we resumed.
     }
     unsafe fn resume_fiber(id: FiberId) {
-        let target = with_current_executor(|executor| {
+        let (target, info, worker_id, shared) = with_current_executor(|executor| {
             assert!(executor.current_fiber.is_none());
             let fiber = executor.shared.fiber(id);
             debug_assert_eq!(fiber.id(), id);
             fiber.prepare_resume();
             executor.current_fiber = Some(id);
-            fiber.handle().as_ptr()
+            (
+                fiber.handle().as_ptr(),
+                fiber.job_info(),
+                executor.worker_id,
+                executor.shared.clone(),
+            )
         });
+        let started_at = shared.profiler.elapsed();
         unsafe {
             // return to target fiber
             SwitchToFiber(target);
         }
 
-        // manager fiber
-        let shared = with_current_executor(|executor| {
+        let ended_at = shared.profiler.elapsed();
+        // Capture and record before the fiber can be published to another worker
+        // or recycled for a different job. No TLS borrow crosses the switch.
+        with_current_executor(|executor| {
             executor.current_fiber = None;
-            executor.shared.clone()
+        });
+        shared.profiler.record(JobRunSegment {
+            job: info,
+            worker_id,
+            fiber_id: id,
+            started_at,
+            ended_at,
         });
         let fiber = shared.fiber(id);
         if let Some(ready) = fiber.finish_parking() {

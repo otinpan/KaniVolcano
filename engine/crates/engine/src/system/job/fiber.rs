@@ -1,6 +1,8 @@
 use super::Job;
 use super::executor::Executor;
 use super::job::CompletedJob;
+use super::profiler::JobInfo;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::{ffi::c_void, ptr::NonNull};
 
@@ -17,7 +19,7 @@ const FIBER_FLAG_FLOAT_SWITCH: u32 = 1;
 pub(crate) type FiberEntry = unsafe extern "system" fn(*mut c_void);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FiberId(pub usize);
+pub struct FiberId(pub usize);
 
 pub(crate) struct Fiber {
     id: FiberId,
@@ -46,6 +48,7 @@ enum FiberKind {
 struct FiberData {
     state: FiberState,
     job: Option<Job>,
+    info: Option<Arc<JobInfo>>,
     wake_pending: bool, // Notification received before the manager finishes parking.
     completed: Option<CompletedJob>,
 }
@@ -62,6 +65,7 @@ impl Fiber {
             data: Mutex::new(FiberData {
                 state: FiberState::Free,
                 job: None,
+                info: None,
                 wake_pending: false,
                 completed: None,
             }),
@@ -83,8 +87,20 @@ impl Fiber {
         assert!(data.job.is_none());
         assert!(data.completed.is_none());
 
+        assert!(data.info.is_none());
+        data.info = Some(job.info.clone());
         data.job = Some(job);
         data.state = FiberState::Assigned;
+    }
+
+    pub(crate) fn job_info(&self) -> Arc<JobInfo> {
+        self.data
+            .lock()
+            .unwrap()
+            .info
+            .as_ref()
+            .expect("fiber has no job info")
+            .clone()
     }
 
     pub(crate) fn take_job(&self) -> Job {
@@ -125,6 +141,7 @@ impl Fiber {
             "consume completion before recycling"
         );
 
+        data.info = None;
         data.state = FiberState::Free;
     }
 

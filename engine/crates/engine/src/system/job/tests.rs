@@ -18,7 +18,7 @@ fn owned_jobs_execute_and_shutdown_rejects_submissions() {
     let count = Arc::new(AtomicUsize::new(0));
     for _ in 0..100 {
         let count = count.clone();
-        jobs.spawn(&group, move || {
+        jobs.spawn(&group, "job", move || {
             count.fetch_add(1, Ordering::Relaxed);
         })
         .unwrap();
@@ -28,10 +28,27 @@ fn owned_jobs_execute_and_shutdown_rejects_submissions() {
         jobs.wait(&group).unwrap();
     }
     assert_eq!(count.load(Ordering::Relaxed), 100);
-    assert!(jobs.spawn(&group, || {}).is_err());
+    let segments: Vec<_> = (0..jobs.profiler().worker_count())
+        .flat_map(|worker| {
+            jobs.profiler()
+                .worker_history(worker)
+                .unwrap()
+                .segments()
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(segments.len(), 100);
+    let ids: std::collections::HashSet<_> = segments.iter().map(|segment| segment.job.id).collect();
+    assert_eq!(ids.len(), 100);
+    assert!(segments.iter().all(
+        |segment| segment.job.name.as_ref() == "job" && segment.started_at <= segment.ended_at
+    ));
+    assert!(jobs.spawn(&group, "job", || {}).is_err());
     system.shutdown().unwrap();
     assert!(system.shared.fibers.lock().unwrap().is_empty());
-    assert!(jobs.spawn(&JobGroup::new(), || {}).is_err());
+    assert!(jobs.spawn(&JobGroup::new(), "job", || {}).is_err());
 }
 
 #[test]
@@ -42,12 +59,12 @@ fn one_worker_and_one_initial_fiber_can_wait_for_children() {
     let child_jobs = jobs.clone();
     let count = Arc::new(AtomicUsize::new(0));
     let child_count = count.clone();
-    jobs.spawn(&parent, move || {
+    jobs.spawn(&parent, "job", move || {
         let children = JobGroup::new();
         for _ in 0..3 {
             let count = child_count.clone();
             child_jobs
-                .spawn(&children, move || {
+                .spawn(&children, "job", move || {
                     count.fetch_add(1, Ordering::Relaxed);
                 })
                 .unwrap();
@@ -74,13 +91,13 @@ fn repeated_waits_and_reuse_across_workers() {
     for _ in 0..16 {
         let jobs_for_parent = jobs.clone();
         let count = count.clone();
-        jobs.spawn(&parents, move || {
+        jobs.spawn(&parents, "job", move || {
             for _ in 0..20 {
                 let group = JobGroup::new();
                 for _ in 0..3 {
                     let count = count.clone();
                     jobs_for_parent
-                        .spawn(&group, move || {
+                        .spawn(&group, "job", move || {
                             count.fetch_add(1, Ordering::Relaxed);
                         })
                         .unwrap();
@@ -109,7 +126,7 @@ fn scoped_jobs_borrow_disjoint_chunks() {
             let group = scope.group();
             for chunk in values.chunks_mut(8) {
                 scope
-                    .spawn(&group, move || {
+                    .spawn(&group, "job", move || {
                         chunk.fill(7);
                     })
                     .unwrap();
@@ -129,7 +146,7 @@ fn scope_body_panic_still_drains_borrowed_jobs() {
     let result = catch_unwind(AssertUnwindSafe(|| unsafe {
         jobs.scope(|scope| {
             scope
-                .spawn(&scope.group(), || {
+                .spawn(&scope.group(), "job", || {
                     value = 42;
                 })
                 .unwrap();
@@ -145,14 +162,15 @@ fn child_panic_is_reported_by_wait_and_scope() {
     let system = JobSystem::new(2, 1, 0).unwrap();
     let jobs = system.handle();
     let group = JobGroup::new();
-    jobs.spawn(&group, || panic!("child failed")).unwrap();
+    jobs.spawn(&group, "job", || panic!("child failed"))
+        .unwrap();
     await_completion(&group);
     assert!(unsafe { jobs.wait(&group) }.is_err());
     assert!(
         unsafe {
             jobs.scope(|scope| {
                 scope
-                    .spawn(&scope.group(), || panic!("scoped child failed"))
+                    .spawn(&scope.group(), "job", || panic!("scoped child failed"))
                     .unwrap();
             })
         }
@@ -169,9 +187,9 @@ fn nested_scoped_submissions_are_drained() {
         jobs.scope(|scope| {
             let value = &value;
             scope
-                .spawn(&scope.group(), move || {
+                .spawn(&scope.group(), "job", move || {
                     scope
-                        .spawn(&scope.group(), move || {
+                        .spawn(&scope.group(), "job", move || {
                             value.store(1, Ordering::Relaxed);
                         })
                         .unwrap();
@@ -188,13 +206,13 @@ fn groups_reject_another_system_and_sealed_submissions() {
     let first = JobSystem::new(1, 1, 0).unwrap();
     let second = JobSystem::new(1, 1, 0).unwrap();
     let group = JobGroup::new();
-    first.handle().spawn(&group, || {}).unwrap();
-    assert!(second.handle().spawn(&group, || {}).is_err());
+    first.handle().spawn(&group, "job", || {}).unwrap();
+    assert!(second.handle().spawn(&group, "job", || {}).is_err());
     assert!(unsafe { second.handle().wait(&group) }.is_err());
     unsafe {
         first.handle().wait(&group).unwrap();
     }
-    assert!(first.handle().spawn(&group, || {}).is_err());
+    assert!(first.handle().spawn(&group, "job", || {}).is_err());
 }
 
 #[test]
@@ -202,7 +220,14 @@ fn parking_notification_is_deferred_until_manager_returns() {
     let handle =
         unsafe { FiberHandle::create(0, fiber::job_fiber_entry, std::ptr::null_mut()).unwrap() };
     let fiber = Fiber::new(FiberId(0), handle);
-    fiber.assign_job(Job::new_owned(|| {}, JobGroup::new()));
+    fiber.assign_job(Job::new_owned(
+        || {},
+        JobGroup::new(),
+        Arc::new(JobInfo {
+            id: JobId(1),
+            name: Arc::from("parking"),
+        }),
+    ));
     let job = fiber.take_job();
     fiber.begin_parking();
     assert!(!fiber.request_wakeup());
@@ -248,7 +273,7 @@ fn scoped_borrows_work_inside_a_waiting_job_fiber() {
     let jobs = system.handle();
     let parent = JobGroup::new();
     let child_jobs = jobs.clone();
-    jobs.spawn(&parent, move || {
+    jobs.spawn(&parent, "job", move || {
         let mut values = vec![0; 32];
         unsafe {
             child_jobs
@@ -256,7 +281,7 @@ fn scoped_borrows_work_inside_a_waiting_job_fiber() {
                     let group = scope.group();
                     for chunk in values.chunks_mut(4) {
                         scope
-                            .spawn(&group, move || {
+                            .spawn(&group, "job", move || {
                                 chunk.fill(9);
                             })
                             .unwrap();
@@ -284,21 +309,21 @@ fn waiting_fiber_resumes_on_another_worker() {
     let blockers = JobGroup::new();
     let parent_jobs = jobs.clone();
     let blocker_group = blockers.clone();
-    jobs.spawn(&parent, move || {
+    jobs.spawn(&parent, "migrating_parent", move || {
         let before = Executor::current_worker_id();
         let children = JobGroup::new();
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let (resumed_tx, resumed_rx) = std::sync::mpsc::channel();
         parent_jobs
-            .spawn(&children, move || {
+            .spawn(&children, "job", move || {
                 started_tx.send(()).unwrap();
                 release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
             })
             .unwrap();
         started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         parent_jobs
-            .spawn(&blocker_group, move || {
+            .spawn(&blocker_group, "job", move || {
                 release_tx.send(()).unwrap();
                 resumed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
             })
@@ -317,4 +342,21 @@ fn waiting_fiber_resumes_on_another_worker() {
         jobs.wait(&parent).unwrap();
         jobs.wait(&blockers).unwrap();
     }
+
+    let segments: Vec<_> = (0..jobs.profiler().worker_count())
+        .flat_map(|worker| {
+            jobs.profiler()
+                .worker_history(worker)
+                .unwrap()
+                .segments()
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .filter(|segment| segment.job.name.as_ref() == "migrating_parent")
+        .collect();
+    assert_eq!(segments.len(), 2);
+    assert_eq!(segments[0].job.id, segments[1].job.id);
+    assert!(Arc::ptr_eq(&segments[0].job, &segments[1].job));
+    assert_ne!(segments[0].worker_id, segments[1].worker_id);
 }

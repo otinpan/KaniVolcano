@@ -2,21 +2,27 @@ mod executor;
 mod fiber;
 mod group;
 mod job;
+mod profiler;
 
 use anyhow::{Result, ensure};
-use executor::{Executor, Worker, WorkerId};
-use fiber::{Fiber, FiberHandle, FiberId};
+pub use executor::WorkerId;
+use executor::{Executor, Worker};
+pub use fiber::FiberId;
+use fiber::{Fiber, FiberHandle};
 pub use group::JobGroup;
+pub use job::JobId;
 use job::{CompletedJob, Job};
+pub use profiler::{JobInfo, JobProfiler, JobRunSegment, WorkerHistory};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::sync::{
     Arc, Condvar, Mutex,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
 };
 
 static NEXT_SYSTEM_ID: AtomicUsize = AtomicUsize::new(1);
+const HISTORY_CAPACITY_PER_WORKER: usize = 4096;
 
 // env live longer than scope
 pub struct JobScope<'scope, 'env: 'scope> {
@@ -30,7 +36,7 @@ impl<'scope, 'env> JobScope<'scope, 'env> {
     pub fn group(&self) -> JobGroup {
         JobGroup::new()
     }
-    pub fn spawn<F>(&'scope self, group: &JobGroup, task: F) -> Result<()>
+    pub fn spawn<F>(&'scope self, group: &JobGroup, name: &str, task: F) -> Result<()>
     where
         F: FnOnce() + Send + 'scope,
     {
@@ -43,6 +49,7 @@ impl<'scope, 'env> JobScope<'scope, 'env> {
             task,
             group.clone(),
             self.scope_group.clone(),
+            self.jobs.shared.new_job_info(name)?,
         ))
     }
     /// # Safety
@@ -58,11 +65,19 @@ pub struct JobSystemHandle {
 }
 
 impl JobSystemHandle {
-    pub fn spawn<F>(&self, group: &JobGroup, task: F) -> Result<()>
+    pub fn spawn<F>(&self, group: &JobGroup, name: &str, task: F) -> Result<()>
     where
         F: FnOnce() + Send + 'static,
     {
-        self.submit(Job::new_owned(task, group.clone()))
+        self.submit(Job::new_owned(
+            task,
+            group.clone(),
+            self.shared.new_job_info(name)?,
+        ))
+    }
+
+    pub fn profiler(&self) -> &JobProfiler {
+        &self.shared.profiler
     }
     fn submit(&self, job: Job) -> Result<()> {
         let mut state = self.shared.scheduler.lock().unwrap();
@@ -170,7 +185,7 @@ impl JobSystem {
             worker_count > 0 && fiber_count > 0,
             "worker/fiber counts must be positive"
         );
-        let shared = Arc::new(JobSystemShared::new(stack_size));
+        let shared = Arc::new(JobSystemShared::new(stack_size, worker_count));
         for _ in 0..fiber_count {
             shared.allocate_fiber()?;
         }
@@ -242,17 +257,21 @@ pub(crate) struct JobSystemShared {
     id: usize,
     fibers: Mutex<Vec<Arc<Fiber>>>,
     scheduler: Mutex<Scheduler>,
+    profiler: JobProfiler,
+    next_job_id: AtomicU64,
     wake: Condvar,
     shutdown: AtomicBool,
     stack_size: usize,
 }
 impl JobSystemShared {
-    fn new(stack_size: usize) -> Self {
+    fn new(stack_size: usize, worker_count: usize) -> Self {
         let id = NEXT_SYSTEM_ID
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .expect("JobSystem ID exhausted");
         Self {
             id,
+            profiler: JobProfiler::new(worker_count, HISTORY_CAPACITY_PER_WORKER),
+            next_job_id: AtomicU64::new(1),
             fibers: Mutex::new(Vec::new()),
             scheduler: Mutex::new(Scheduler {
                 accepting: true,
@@ -263,6 +282,19 @@ impl JobSystemShared {
             stack_size,
         }
     }
+
+    // return id before updated atomicly.
+    fn new_job_info(&self, name: &str) -> Result<Arc<JobInfo>> {
+        let id = self
+            .next_job_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .map_err(|_| anyhow::anyhow!("JobId exhausted"))?;
+        Ok(Arc::new(JobInfo {
+            id: JobId(id),
+            name: Arc::from(name),
+        }))
+    }
+
     fn allocate_fiber(&self) -> Result<FiberId> {
         let handle = unsafe {
             FiberHandle::create(

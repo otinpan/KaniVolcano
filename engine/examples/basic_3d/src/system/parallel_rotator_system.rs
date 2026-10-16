@@ -18,11 +18,11 @@ impl UpdateSystem for ParallelRotatorSystem {
         let mut entries: Vec<_> = context.query2_mut::<Transform, Rotator>().collect();
 
         unsafe {
-        pe(|scope| -> Result<()> {
+            jobs.scope(|scope| -> Result<()> {
                 let group = scope.group();
 
                 for chunk in entries.chunks_mut(256) {
-                    scope.spawn(&group, move || {
+                    scope.spawn(&group, "rotate_chunk", move || {
                         for (_, transform, rotator) in chunk {
                             transform.rotate(rotator.speed * dt);
                         }

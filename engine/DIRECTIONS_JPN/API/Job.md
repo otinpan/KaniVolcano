@@ -59,7 +59,7 @@ impl UpdateSystem for ParallelRotatorSystem {
                 let group = scope.group();
 
                 for chunk in entries.chunks_mut(256) {
-                    scope.spawn(&group, move || {
+                    scope.spawn(&group, "rotate_chunk", move || {
                         // このクロージャは Worker 上で実行される。
                         for (_, transform, rotator) in chunk {
                             transform.rotate(rotator.speed * dt);
@@ -84,7 +84,7 @@ impl UpdateSystem for ParallelRotatorSystem {
 
 1. `jobs.scope(...)`：借用したデータを使う Job を作成できる範囲を開始します。scope の終了前に、その scope から投入したすべての Job の完了が保証されます。明示的な `wait()` を省略した場合も同様です。
 2. `scope.group()`：投入する Job の完了をまとめて管理するグループを作成します。
-3. `scope.spawn(&group, func)`：`func`（`FnOnce() + Send`）を Job として共有キューに投入し、指定したグループに登録します。この例では、重複しない256件ずつの範囲を各 Job に渡します。
+3. `scope.spawn(&group, name, func)`：`func`（`FnOnce() + Send`）を Job として共有キューに投入し、指定したグループに登録します。`name` は計測用の名前です。同じ名前の Job も、それぞれ別の JobId で識別されます。この例では、重複しない256件ずつの範囲を各 Job に渡します。
 4. `scope.wait(&group)`：指定したグループに属するすべての Job の完了を待ちます。この呼び出しでグループは追加投入を禁止する状態になるため、以降の Job には新しいグループを使います。
 
 例えば、処理 A の後に Job B・C・D を並列に実行し、その結果を使って処理 E を行いたい場合、B・C・D を同じグループに登録します。A を実行してから子 Job を投入し、`scope.wait(&group)?` の後に E を実行します。scope のクロージャ自体は自動的に Job になるわけではありません。
