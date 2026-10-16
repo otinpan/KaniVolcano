@@ -113,3 +113,7 @@ impl UpdateSystem for ParallelRotatorSystem {
 - 地形や mesh の頂点・index・法線の生成
 
 Job 間で可変データへの参照が重複しないように分割し、GPU 操作などスレッドに制約のある処理は、計算結果を集約した後で適切なスレッドから実行します。
+
+
+## プロファイリング
+KaniVolcanoEngineはプロファイリングのためのAPIを用意しています。

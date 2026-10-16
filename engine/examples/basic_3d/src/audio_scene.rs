@@ -425,7 +425,7 @@ impl AudioScene {
             KeyCode::Space,
             InputTrigger::Pressed,
             ChangeSceneCommand {
-                next_scene: "ParallelRotatorScene".to_string(),
+                next_scene: "ParallelCalculatorScene".to_string(),
             },
         )
     }

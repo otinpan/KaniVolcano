@@ -3,7 +3,10 @@ use cgmath::{vec3,vec2};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_math::Transform;
 use winit::keyboard::KeyCode;
-pub struct BasicFieldScene {}
+use crate::{ThreadProfilerBootstrap};
+pub struct BasicFieldScene {
+    scene_id: SceneId,
+}
 
 impl Scene for BasicFieldScene {
     fn name(&self) -> String {
@@ -11,13 +14,14 @@ impl Scene for BasicFieldScene {
     }
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        self.scene_id=context.scene_id();
         context.set_skybox("default")?;
         self.create_camera(context)?;
         self.create_fundation(context)?;
         self.create_texts(context)?;
 
         self.add_update_systems(context);
-
+        self.add_thread_profiler(context);
         self.bind_input_commands(context);
         Ok(())
     }
@@ -120,11 +124,43 @@ impl BasicFieldScene {
             SpawnTransparentVikingRoom,
         );
     }
+
+    fn add_thread_profiler(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        // Both rectangles and grid lines reuse centered white 1x1 Ui2D meshes.
+        // SceneContext creates their GPU meshes during the following render stage.
+        let mut mesh_entities = Vec::new();
+        for _ in 0..2 {
+            let entity = context.spawn_rectangle_2d(
+                vec2(0.0, 0.0),
+                1.0,
+                1.0,
+                0.0,
+                vec3(1.0, 1.0, 1.0),
+                1.0,
+                None,
+            )?;
+            if let Some(visibility) = context.get_component_mut::<Visibility>(entity) {
+                visibility.is_visible = false;
+            }
+            mesh_entities.push(entity);
+        }
+        context.add_update_system(
+            "thread_profiler",
+            ThreadProfilerBootstrap {
+                mesh_entities: [mesh_entities[0], mesh_entities[1]],
+                scene_id: self.scene_id,
+                profiler: None,
+            },
+        );
+        Ok(())
+    }
 }
 
 impl Default for BasicFieldScene {
     fn default() -> Self {
-        Self {}
+        Self {
+            scene_id: SceneId(0),
+        }
     }
 }
 

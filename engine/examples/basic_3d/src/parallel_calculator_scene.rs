@@ -4,12 +4,13 @@
 use super::ChangeSceneCommand;
 use crate::system::ParallelRotatorSystem;
 use anyhow::{Result, anyhow};
-use cgmath::vec3;
+use cgmath::{vec2, vec3};
+use kani_volcano_engine::ThreadProfilerSystem;
 use kani_volcano_engine::prelude::*;
 use rand::{RngExt, rngs::ThreadRng};
 use winit::keyboard::KeyCode;
 
-pub struct ParallelRotatorScene {
+pub struct ParallelCalculatorScene {
     scene_id: SceneId,
     main_cube: Option<EntityId>,
     ground: f32,
@@ -17,9 +18,9 @@ pub struct ParallelRotatorScene {
     cubes_created: bool,
 }
 
-impl Scene for ParallelRotatorScene {
+impl Scene for ParallelCalculatorScene {
     fn name(&self) -> String {
-        "ParallelRotatorScene".to_string()
+        "ParallelCalculatorScene".to_string()
     }
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
@@ -34,6 +35,7 @@ impl Scene for ParallelRotatorScene {
         //self.spawn_rotate_primitive(context)?;
 
         self.add_update_systems(context);
+        self.add_thread_profiler(context)?;
         self.bind_input_commands(context);
         Ok(())
     }
@@ -58,7 +60,7 @@ impl Scene for ParallelRotatorScene {
     }
 }
 
-impl ParallelRotatorScene {
+impl ParallelCalculatorScene {
     fn create_camera(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let camera = context.spawn();
         context.add_component(camera, Transform::default());
@@ -117,17 +119,23 @@ impl ParallelRotatorScene {
         Ok(())
     }
 
-    fn create_rotate_entities(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
+    fn create_rotate_entities(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         for _ in 0..100_000 {
             let entity = context.spawn();
 
             context.add_component(entity, Transform::default());
-            context.add_component(entity, Rotator {
-                speed: vec3(60.0, 0.0, 0.0),
-            });
-            context.add_component(entity, SceneOwned {
-                scene_id: self.scene_id,
-            });
+            context.add_component(
+                entity,
+                Rotator {
+                    speed: vec3(60.0, 0.0, 0.0),
+                },
+            );
+            context.add_component(
+                entity,
+                SceneOwned {
+                    scene_id: self.scene_id,
+                },
+            );
         }
 
         Ok(())
@@ -138,13 +146,13 @@ impl ParallelRotatorScene {
         mesh_id: MeshAssetId,
     ) -> Result<()> {
         let texture = context.default_texture();
-        for _ in 0..200{
+        for _ in 0..200 {
             let height = self.rng.random_range(1.0..5.0);
             let width = self.rng.random_range(0.5..2.0);
-            let z=self.rng.random_range(0.0..5.0);
+            let z = self.rng.random_range(0.0..5.0);
             let y = self.rng.random_range(-17.0..17.0);
             let x = self.rng.random_range(-17.0..17.0);
-            let rot=self.rng.random_range(-60.0..60.0);
+            let rot = self.rng.random_range(-60.0..60.0);
 
             let obj = context.spawn_primitive_from_mesh(
                 mesh_id,
@@ -194,8 +202,39 @@ impl ParallelRotatorScene {
     }
 
     fn add_update_systems(&mut self, context: &mut SceneContext<'_>) {
-        context.add_update_system("camera",CameraSystem);
-        context.add_fixed_update_system("parallel_rotator_system", ParallelRotatorSystem::default());
+        context.add_update_system("camera", CameraSystem);
+        context
+            .add_fixed_update_system("parallel_rotator_system", ParallelRotatorSystem::default());
+    }
+
+    fn add_thread_profiler(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        // Both rectangles and grid lines reuse centered white 1x1 Ui2D meshes.
+        // SceneContext creates their GPU meshes during the following render stage.
+        let mut mesh_entities = Vec::new();
+        for _ in 0..2 {
+            let entity = context.spawn_rectangle_2d(
+                vec2(0.0, 0.0),
+                1.0,
+                1.0,
+                0.0,
+                vec3(1.0, 1.0, 1.0),
+                1.0,
+                None,
+            )?;
+            if let Some(visibility) = context.get_component_mut::<Visibility>(entity) {
+                visibility.is_visible = false;
+            }
+            mesh_entities.push(entity);
+        }
+        context.add_update_system(
+            "thread_profiler",
+            ThreadProfilerBootstrap {
+                mesh_entities: [mesh_entities[0], mesh_entities[1]],
+                scene_id: self.scene_id,
+                profiler: None,
+            },
+        );
+        Ok(())
     }
     fn bind_input_commands(&mut self, context: &mut SceneContext<'_>) {
         context.bind_input_command(
@@ -208,7 +247,31 @@ impl ParallelRotatorScene {
     }
 }
 
-impl Default for ParallelRotatorScene {
+// Resolve deferred mesh assets once, then delegate every update to the profiler.
+pub struct ThreadProfilerBootstrap {
+    pub mesh_entities: [EntityId; 2],
+    pub scene_id: SceneId,
+    pub profiler: Option<ThreadProfilerSystem>,
+}
+
+impl UpdateSystem for ThreadProfilerBootstrap {
+    fn update(&mut self, context: &mut UpdateContext<'_>) -> Result<()> {
+        if self.profiler.is_none() {
+            let Some(rect_mesh_id) = context.mesh_asset_id(self.mesh_entities[0]) else {
+                return Ok(());
+            };
+            let Some(line_mesh_id) = context.mesh_asset_id(self.mesh_entities[1]) else {
+                return Ok(());
+            };
+            let mut profiler = ThreadProfilerSystem::new(rect_mesh_id, line_mesh_id);
+            profiler.scene_id = Some(self.scene_id);
+            self.profiler = Some(profiler);
+        }
+        self.profiler.as_mut().unwrap().update(context)
+    }
+}
+
+impl Default for ParallelCalculatorScene {
     fn default() -> Self {
         Self {
             scene_id: SceneId(0),
