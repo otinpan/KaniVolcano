@@ -21,6 +21,7 @@ It is designed around ECS, scenes, and context-based APIs so users can create en
 
 ![](assets/tutorial_font3d.png)
 ![](assets/job_system_profiler.png)
+![](assets/shooting_game.png)
 
 ## Getting Started
 

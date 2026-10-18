@@ -146,7 +146,7 @@ impl ParallelCalculatorScene {
         mesh_id: MeshAssetId,
     ) -> Result<()> {
         let texture = context.default_texture();
-        for _ in 0..200 {
+        for _ in 0..2000 {
             let height = self.rng.random_range(1.0..5.0);
             let width = self.rng.random_range(0.5..2.0);
             let z = self.rng.random_range(0.0..5.0);
