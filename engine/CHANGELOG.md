@@ -98,3 +98,8 @@ Create JobSystem
 * Users can profile them
 
 ![](../assets/job_system_profiler.png)
+
+## ver0.5.0
+Create Debug Puase feature
+* Users can pause/resume using TimeManagerApi
+* Systems registerd in `add_fixed_update_system()` or commands  registerd in `bind_debubg_command()` can be affected.

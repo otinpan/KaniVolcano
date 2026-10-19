@@ -18,6 +18,7 @@ It is designed around ECS, scenes, and context-based APIs so users can create en
 - Audio System
 - Font System
 - Parallel Job System/ Multi Thread
+- Debug Pause/Resume
 
 ![](assets/tutorial_font3d.png)
 ![](assets/job_system_profiler.png)
