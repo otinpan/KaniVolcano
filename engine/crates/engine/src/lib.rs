@@ -47,6 +47,7 @@ pub use system::{
     AudioCommand, AudioCommandQueue, AudioApi, AudioBusSettings, AudioBusType, AudioEmitterSettings, AudioSend,
     AudioCommandSystem, JobSystem, JobSystemHandle, JobApi,
     JobId, JobInfo, JobProfiler, JobRunSegment, WorkerHistory, WorkerId, FiberId,
+    TimeManager, TimeManagementCommand, TimeManagementCommandQueue, TimeManagementApi, DebugPauseCommand,
 };
 pub use time::Time;
 pub use kani_volcano_audio::PlaybackSettings;
@@ -58,9 +59,9 @@ pub mod prelude {
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
         ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, ThreadProfilerSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
-        UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline,
+        UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
-        AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle,
+        AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle, DebugPauseCommand,
     };
 
     pub use kani_volcano_math::Transform;

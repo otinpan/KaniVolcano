@@ -200,53 +200,22 @@ Main Thread
        ↓
     Vulkan
 ```
-```rust
-fn update(&mut self, context: &mut UpdateContext<'_>) -> Result<()> {
-    // component を借りる前に、所有できる executor handle を取得
-    let jobs = context.jobs();
-    let dt = context.delta_seconds();
-
-    let mut entries: Vec<_> = context
-        .query2_mut_mut::<Transform, MoveRotateComponent>()
-        .collect();
-
-    jobs.scope(|scope| {
-		// job1の前半処理
-		prepare();
-
-        let group = scope.group();
-
-        for chunk in entries.chunks_mut(256) {
-            scope.spawn(&group, move || {
-                for (_, transform, movement) in chunk {
-                    update_entity(transform, movement, dt);
-                }
-            });
-        }
-
-        scope.wait(&group); // job1 wait for finish other jobs
-
-		// 他のjobの結果を使う処理
-		finish(); // job1 resume
-
-    }); // wait を省略しても、scope 終了時には全 job を待つ
-
-    drop(entries);
-
-    // Context を使う処理を再開
-    Ok(())
-}
-```
-	- ユーザ定義データの保存、復元
 * デバッグ機能
-	- フレーム計測
-	- ゲーム内メニューでログ表示
-	- ゲームの一時停止(カメラ操作可能)
-	- シングルステップ実行
+	- Pause, Resume, Step
+	- 固定タイムステップ
+	- CPUプロファイル
 	- スローモーション
 	- プロファイリング
 	- Entity数
 	- GPUリソース表示
+* AIがゲームを解析 -> 仕様書作成 -> 実装エージェント
+1. 人間介入
+	* 解析エージェント -> 仕様書作成 -> 人間チェック 
+	* 仕様書 -> 実装エージェント
+2. 人間非介入
+	* 解析エージェント <-> プロデューサエージェント 矛盾や不足を指摘
+	* 実装エージェント <-> 検証エージェント
+* ユーザ定義データの保存、復元
 * UI操作
 	- ボタン
 	- クリック判定

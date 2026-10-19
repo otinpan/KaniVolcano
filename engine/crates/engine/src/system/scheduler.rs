@@ -7,7 +7,7 @@ use super::{
     Command, CommandContext, CommandQueue, CommandSystem, InputSystem, InputTrigger,
     RenderCommandQueue, RenderContext, RenderSystem, ScheduledUpdateSystem, UpdateContext,
     UpdateSystem, TextRenderSystem, AssetLoadSystem, AssetLoadCommandQueue, AssetLoadOutcome,
-    AudioCommandQueue, AudioCommandSystem, JobSystem,
+    AudioCommandQueue, AudioCommandSystem, JobSystem, TimeManagementCommandQueue,
 };
 
 use crate::{Input, Resources, SceneCommandQueue, Time, World};
@@ -19,6 +19,7 @@ pub type Vec3 = Vector3<f32>;
 pub struct Scheduler {
     pub command_system: CommandSystem,
     pub input_system: InputSystem,
+    debug_input_system: InputSystem,
     pub render_system: RenderSystem,
     pub text_render_system: TextRenderSystem,
     pub asset_load_system: Option<AssetLoadSystem>,
@@ -27,6 +28,7 @@ pub struct Scheduler {
     pub render_commands: RenderCommandQueue,
     pub asset_load_commands: AssetLoadCommandQueue,
     pub audio_commands: AudioCommandQueue,
+    pub time_management_commands: TimeManagementCommandQueue,
     update_systems: Vec<ScheduledUpdateSystem>,
     fixed_update_systems: Vec<ScheduledUpdateSystem>,
 }
@@ -50,12 +52,14 @@ impl Scheduler {
         render_commands: RenderCommandQueue,
         asset_load_commands: AssetLoadCommandQueue,
         audio_commands: AudioCommandQueue,
+        time_management_commands: TimeManagementCommandQueue,
         update_systems: Vec<ScheduledUpdateSystem>,
         fixed_update_systems: Vec<ScheduledUpdateSystem>,
     ) -> Self {
         Self {
             command_system,
             input_system,
+            debug_input_system: InputSystem::new(),
             render_system,
             text_render_system,
             asset_load_system,
@@ -63,6 +67,7 @@ impl Scheduler {
             audio_commands,
             render_commands,
             asset_load_commands,
+            time_management_commands,
             audio_command_system,
             update_systems,
             fixed_update_systems,
@@ -109,7 +114,9 @@ impl Scheduler {
 
     pub fn reset_scene_runtime(&mut self) {
         self.input_system.reset();
+        self.debug_input_system.reset();
         self.update_systems.clear();
+        self.fixed_update_systems.clear();
     }
 
     pub fn bind_key<C>(&mut self, key: winit::keyboard::KeyCode, trigger: InputTrigger, command: C)
@@ -121,6 +128,18 @@ impl Scheduler {
 
     pub fn run_input_stage(&self, input: &Input) -> CommandQueue {
         self.input_system.update(input)
+    }
+
+    /// Registers a command that runs even while the simulation is paused.
+    pub fn bind_debug_key<C>(&mut self, key: winit::keyboard::KeyCode, trigger: InputTrigger, command: C)
+    where
+        C: Command + 'static,
+    {
+        self.debug_input_system.bind_in_place(key, trigger, command);
+    }
+
+    pub fn run_debug_input_stage(&self, input: &Input) -> CommandQueue {
+        self.debug_input_system.update(input)
     }
 
     pub fn run_command_stage(
@@ -140,6 +159,7 @@ impl Scheduler {
             &mut self.asset_load_commands,
             &mut self.audio_commands,
             scene_commands,
+            &mut self.time_management_commands,
         );
 
         self.command_system.update(&mut context)
@@ -163,6 +183,7 @@ impl Scheduler {
             &mut self.asset_load_commands,
             &mut self.audio_commands,
             scene_commands,
+            &mut self.time_management_commands,
         );
 
         for scheduled_system in &mut self.update_systems {
@@ -191,6 +212,7 @@ impl Scheduler {
             &mut self.asset_load_commands,
             &mut self.audio_commands,
             scene_commands,
+            &mut self.time_management_commands,
         );
 
         for scheduled_system in &mut self.fixed_update_systems {
@@ -285,6 +307,7 @@ impl Default for Scheduler {
         Self {
             command_system: CommandSystem,
             input_system: InputSystem::new(),
+            debug_input_system: InputSystem::new(),
             render_system: RenderSystem,
             text_render_system: TextRenderSystem::default(),
             asset_load_system: None,
@@ -293,6 +316,7 @@ impl Default for Scheduler {
             render_commands: RenderCommandQueue::default(),
             asset_load_commands: AssetLoadCommandQueue::default(),
             audio_commands: AudioCommandQueue::default(),
+            time_management_commands: TimeManagementCommandQueue::default(),
             update_systems: Vec::new(),
             fixed_update_systems: Vec::new(),
         }
@@ -302,6 +326,49 @@ impl Default for Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct ResumeCommand;
+
+    impl Command for ResumeCommand {
+        fn id(&self) -> String {
+            "resume".to_string()
+        }
+
+        fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
+            use crate::TimeManagementApi;
+            context.resume();
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn debug_input_can_resume_without_running_game_commands() {
+        use crate::{TimeManager, TimeManagementCommand};
+        use winit::keyboard::KeyCode;
+
+        let mut scheduler = Scheduler::default();
+        scheduler.bind_key(KeyCode::Space, InputTrigger::Pressed, ResumeCommand);
+        scheduler.bind_debug_key(KeyCode::KeyR, InputTrigger::Pressed, ResumeCommand);
+        let mut manager = TimeManager::default();
+        scheduler.time_management_commands.push(TimeManagementCommand::Pause);
+        manager.apply(&mut scheduler.time_management_commands);
+        let mut input = Input::default();
+        input.press_key(KeyCode::Space);
+        assert!(scheduler.run_debug_input_stage(&input).is_empty());
+        input.press_key(KeyCode::KeyR);
+        let mut commands = scheduler.run_debug_input_stage(&input);
+        assert_eq!(commands.len(), 1);
+        scheduler.run_command_stage(
+            &mut commands,
+            &mut World::default(),
+            &input,
+            &mut Resources::default(),
+            &mut SceneCommandQueue::default(),
+        ).unwrap();
+        manager.apply(&mut scheduler.time_management_commands);
+        assert!(!manager.is_paused());
+        assert!(scheduler.time_management_commands.is_empty());
+    }
 
     struct TestUpdateSystem;
 

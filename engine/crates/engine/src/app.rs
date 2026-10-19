@@ -19,7 +19,7 @@ use crate::primitive::{
 
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
-    UpdateContext, FontAssetId, AudioAssetId, 
+    UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -44,6 +44,31 @@ pub struct App {
     fixed_accumulator: f64,
     fixed_time: Time,
     fixed_delta: f64,
+    time_manager: TimeManager,
+    simulation_tick: u64,
+    game_input: Input,
+}
+
+impl TimeManagementApi for App {
+    fn time_management_commands_mut(&mut self) -> &mut TimeManagementCommandQueue {
+        &mut self.scheduler.time_management_commands
+    }
+}
+
+fn consume_simulation_tick(
+    manager: &mut TimeManager,
+    accumulator: &mut f64,
+    fixed_delta: f64,
+) -> bool {
+    if manager.is_paused() {
+        *accumulator = 0.0;
+        manager.consume_step()
+    } else if *accumulator >= fixed_delta {
+        *accumulator -= fixed_delta;
+        true
+    } else {
+        false
+    }
 }
 
 impl App {
@@ -84,6 +109,9 @@ impl App {
             fixed_accumulator: 0.0,
             fixed_time: Time::default(),
             fixed_delta: 1.0 / 60.0,
+            time_manager: TimeManager::default(),
+            simulation_tick: 0,
+            game_input: Input::default(),
         };
 
         app.scheduler
@@ -125,7 +153,8 @@ impl App {
             }
         }
 
-        let mut commands = self.scheduler.run_input_stage(&self.input);
+        self.game_input.accumulate_frame(&self.input);
+        let mut commands = self.scheduler.run_debug_input_stage(&self.input);
 
         self.scheduler.run_command_stage(
             &mut commands,
@@ -135,37 +164,31 @@ impl App {
             &mut self.scene_commands,
         )?;
 
-        // Limit catch-up after a long pause to 0.25 seconds.
-        self.fixed_accumulator += f64::from(delta_time).min(0.25);
-
-        while self.fixed_accumulator >= self.fixed_delta {
-            self.fixed_time.advance_fixed(self.fixed_delta as f32);
-
-            self.scheduler.run_fixed_update_stage(
-                &mut self.world,
-                &self.input,
-                &self.fixed_time,
-                &mut self.resources,
-                &mut self.scene_commands,
-            )?;
-
-            self.fixed_accumulator -= self.fixed_delta;
+        let control_changed = self.apply_time_management_commands();
+        // Discard wall time on control changes and while paused.
+        if !control_changed && !self.time_manager.is_paused() {
+            self.fixed_accumulator += f64::from(delta_time).min(0.25);
         }
 
-        {
-            let mut context = UpdateContext::new(
-                &mut self.world,
-                &self.input,
-                &self.time,
-                &mut self.resources,
-                &mut self.scheduler.render_commands,
-                &mut self.scheduler.asset_load_commands,
-                &mut self.scheduler.audio_commands,
-                &mut self.scene_commands,
-            );
-            self.scene_manager.update_current_scene(&mut context)?;
+        // Large Step requests are spread across frames so controls stay responsive.
+        for _ in 0..16 {
+            self.apply_time_management_commands();
+            if !consume_simulation_tick(
+                &mut self.time_manager,
+                &mut self.fixed_accumulator,
+                self.fixed_delta,
+            ) {
+                break;
+            }
+            self.run_game_tick()?;
+            self.game_input.clear_transitions();
+        }
+        self.apply_time_management_commands();
+        if self.time_manager.is_paused() {
+            self.game_input.clear_transitions();
         }
 
+        // Frame updates use wall time and remain active while paused.
         self.scheduler.run_update_stage(
             &mut self.world,
             &self.input,
@@ -174,6 +197,7 @@ impl App {
             &mut self.scene_commands,
         )?;
 
+        // Debug commands may request a scene change even while paused.
         self.apply_scene_commands()?;
 
         // load asset (read file, create pixels) in worker thread (maximum 4)
@@ -192,6 +216,61 @@ impl App {
 
         self.input.clear_transitions();
         Ok(())
+    }
+
+    fn apply_time_management_commands(&mut self) -> bool {
+        if self.scheduler.time_management_commands.is_empty() {
+            return false;
+        }
+        self.time_manager.apply(&mut self.scheduler.time_management_commands);
+        self.fixed_accumulator = 0.0;
+        true
+    }
+
+    fn run_game_tick(&mut self) -> Result<()> {
+        self.fixed_time.advance_fixed(self.fixed_delta as f32);
+        let mut commands = self.scheduler.run_input_stage(&self.game_input);
+        self.scheduler.run_command_stage(
+            &mut commands,
+            &mut self.world,
+            &self.game_input,
+            &mut self.resources,
+            &mut self.scene_commands,
+        )?;
+        self.scheduler.run_fixed_update_stage(
+            &mut self.world,
+            &self.game_input,
+            &self.fixed_time,
+            &mut self.resources,
+            &mut self.scene_commands,
+        )?;
+        let mut context = UpdateContext::new(
+            &mut self.world,
+            &self.game_input,
+            &self.fixed_time,
+            &mut self.resources,
+            &mut self.scheduler.render_commands,
+            &mut self.scheduler.asset_load_commands,
+            &mut self.scheduler.audio_commands,
+            &mut self.scene_commands,
+            &mut self.scheduler.time_management_commands,
+        );
+        self.scene_manager.update_current_scene(&mut context)?;
+        self.apply_scene_commands()?;
+        self.simulation_tick += 1;
+        Ok(())
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.time_manager.is_paused()
+    }
+
+    pub fn simulation_tick(&self) -> u64 {
+        self.simulation_tick
+    }
+
+    pub fn simulation_time(&self) -> &Time {
+        &self.fixed_time
     }
 
     pub unsafe fn destroy(&mut self) {
@@ -456,4 +535,57 @@ unsafe fn create_primitive_meshes(
     ];
 
     Ok(primitive_meshes)
+}
+
+#[cfg(test)]
+mod simulation_tests {
+    use super::*;
+    use crate::TimeManagementCommand;
+
+    #[test]
+    fn paused_wall_time_is_discarded_and_resume_does_not_catch_up() {
+        let mut manager = TimeManager::default();
+        let mut queue = TimeManagementCommandQueue::default();
+        queue.push(TimeManagementCommand::Pause);
+        manager.apply(&mut queue);
+        let mut accumulator = 120.0;
+        assert!(!consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+        assert_eq!(accumulator, 0.0);
+        queue.push(TimeManagementCommand::Resume);
+        manager.apply(&mut queue);
+        assert!(!consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+        accumulator += 0.02;
+        assert!(consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+    }
+
+    #[test]
+    fn step_advances_exactly_requested_ticks_with_fixed_time() {
+        let mut manager = TimeManager::default();
+        let mut queue = TimeManagementCommandQueue::default();
+        queue.push(TimeManagementCommand::Step(3));
+        manager.apply(&mut queue);
+        let mut time = Time::default();
+        let mut accumulator = 100.0;
+        for _ in 0..3 {
+            assert!(consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+            time.advance_fixed(0.02);
+        }
+        assert!(!consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+        assert!(manager.is_paused());
+        assert!((time.elapsed_seconds() - 0.06).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pause_from_a_tick_cancels_remaining_steps_at_the_boundary() {
+        let mut manager = TimeManager::default();
+        let mut queue = TimeManagementCommandQueue::default();
+        queue.push(TimeManagementCommand::Step(10));
+        manager.apply(&mut queue);
+        let mut accumulator = 0.0;
+        assert!(consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+        queue.push(TimeManagementCommand::Pause);
+        manager.apply(&mut queue);
+        assert!(!consume_simulation_tick(&mut manager, &mut accumulator, 0.02));
+        assert!(queue.is_empty());
+    }
 }

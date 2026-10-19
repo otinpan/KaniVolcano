@@ -422,11 +422,18 @@ impl AudioScene {
 
     fn bind_input_commands(&mut self, context: &mut SceneContext<'_>) {
         context.bind_input_command(
-            KeyCode::Space,
+            KeyCode::Digit0,
             InputTrigger::Pressed,
             ChangeSceneCommand {
                 next_scene: "ParallelCalculatorScene".to_string(),
             },
+        );
+
+        // debug command
+        context.bind_debug_input_command(
+            KeyCode::F6,
+            InputTrigger::Pressed,
+            DebugPauseCommand,
         )
     }
 }

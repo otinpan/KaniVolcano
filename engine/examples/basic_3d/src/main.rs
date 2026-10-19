@@ -28,7 +28,7 @@ fn main() -> Result<()> {
             app.add_scene(AudioScene::default())?;
             app.add_scene(ParallelCalculatorScene::default())?;
 
-            app.set_current_scene("ParallelCalculatorScene")?;
+            app.set_current_scene("Basic3dScene")?;
             Ok(())
         },
     )

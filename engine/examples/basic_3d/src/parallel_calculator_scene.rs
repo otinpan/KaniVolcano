@@ -238,7 +238,7 @@ impl ParallelCalculatorScene {
     }
     fn bind_input_commands(&mut self, context: &mut SceneContext<'_>) {
         context.bind_input_command(
-            KeyCode::Space,
+            KeyCode::Digit0,
             InputTrigger::Pressed,
             ChangeSceneCommand {
                 next_scene: "Basic3dScene".to_string(),

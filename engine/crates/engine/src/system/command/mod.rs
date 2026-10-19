@@ -12,6 +12,7 @@ mod despawn_last_command;
 mod spawn_primitive_command;
 mod spawn_viking_room_command;
 mod update_primitive_meshes_command;
+mod debug_pause_command;
 
 pub use create_primitive_command::CreatePrimitiveCommand;
 pub use debug_monitor::DebugMonitor;
@@ -19,6 +20,7 @@ pub use despawn_last_command::DespawnLastCommand;
 pub use spawn_primitive_command::SpawnPrimitiveCommand;
 pub use spawn_viking_room_command::SpawnVikingRoomCommand;
 pub use update_primitive_meshes_command::UpdatePrimitiveMeshesCommand;
+pub use debug_pause_command::DebugPauseCommand;
 
 use anyhow::Result;
 use cgmath::Vector3;
@@ -28,11 +30,12 @@ use crate::component::{Material, PendingPrimitiveMesh, Visibility};
 use crate::primitive::spawn_primitive_from_mesh;
 use crate::{
     AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, 
-    AssetLoadApi, AudioApi,
+    AssetLoadApi, AudioApi, TimeManagementApi,
 };
 use crate::{
     CommandQueue, EntityId, Input, MeshAssetId, PrimitiveShape, RenderCommandQueue, Resources,
     SceneCommandQueue, World, AssetLoadCommandQueue, AudioCommandQueue,
+    TimeManagementCommandQueue,
 };
 use kani_volcano_math::Transform;
 use renderer_vulkan::PipelineKey;
@@ -49,6 +52,7 @@ pub struct CommandContext<'a> {
     asset_load_commands: &'a mut AssetLoadCommandQueue,
     audio_commands: &'a mut AudioCommandQueue,
     scene_commands: &'a mut SceneCommandQueue,
+    time_management_commands: &'a mut TimeManagementCommandQueue,
 }
 
 impl<'a> CommandContext<'a> {
@@ -61,6 +65,7 @@ impl<'a> CommandContext<'a> {
         asset_load_commands: &'a mut AssetLoadCommandQueue,
         audio_commands: &'a mut AudioCommandQueue,
         scene_commands: &'a mut SceneCommandQueue,
+        time_management_commands: &'a mut TimeManagementCommandQueue,
     ) -> Self {
         Self {
             commands,
@@ -71,6 +76,7 @@ impl<'a> CommandContext<'a> {
             asset_load_commands,
             audio_commands,
             scene_commands,
+            time_management_commands,
         }
     }
 
@@ -213,6 +219,12 @@ impl AssetLoadApi for CommandContext<'_>{
 impl AudioApi for CommandContext<'_>{
     fn audio_commands_mut(&mut self) -> &mut AudioCommandQueue{
         &mut self.audio_commands
+    }
+}
+
+impl TimeManagementApi for CommandContext<'_>{
+    fn time_management_commands_mut(&mut self) -> &mut TimeManagementCommandQueue{
+        &mut self.time_management_commands
     }
 }
 

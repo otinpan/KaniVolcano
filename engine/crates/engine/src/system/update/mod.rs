@@ -16,6 +16,7 @@ pub use super::render_command::RenderCommandQueue;
 pub use super::asset_load_command::AssetLoadCommandQueue;
 pub use super::audio_command::AudioCommandQueue;
 pub use super::scene_command::SceneCommandQueue;
+pub use super::time_management::TimeManagementCommandQueue;
 use crate::app::DEFAULT_TEXTURE;
 use crate::component::{Material, Visibility};
 use crate::primitive::spawn_primitive_from_mesh;
@@ -27,7 +28,7 @@ use renderer_vulkan::PipelineKey;
 
 use crate::{
     AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi,
-    AudioApi,
+    AudioApi, TimeManagementApi,
 };
 pub use camera_system::CameraSystem;
 pub use rotator_system::RotatorSystem;
@@ -45,6 +46,7 @@ pub struct UpdateContext<'a> {
     asset_load_commands: &'a mut AssetLoadCommandQueue,
     audio_commands: &'a mut AudioCommandQueue,
     scene_commands: &'a mut SceneCommandQueue,
+    time_management_commands: &'a mut TimeManagementCommandQueue,
 }
 
 impl<'a> UpdateContext<'a> {
@@ -57,6 +59,7 @@ impl<'a> UpdateContext<'a> {
         asset_load_commands: &'a mut AssetLoadCommandQueue,
         audio_commands: &'a mut AudioCommandQueue,
         scene_commands: &'a mut SceneCommandQueue,
+        time_management_commands: &'a mut TimeManagementCommandQueue,
     ) -> Self {
         Self {
             world,
@@ -67,6 +70,7 @@ impl<'a> UpdateContext<'a> {
             asset_load_commands,
             audio_commands,
             scene_commands,
+            time_management_commands,
         }
     }
 
@@ -210,6 +214,12 @@ impl AssetLoadApi for UpdateContext<'_>{
 impl AudioApi for UpdateContext<'_>{
     fn audio_commands_mut(&mut self) -> &mut AudioCommandQueue{
         &mut self.audio_commands
+    }
+}
+
+impl TimeManagementApi for UpdateContext<'_>{
+    fn time_management_commands_mut(&mut self) -> &mut TimeManagementCommandQueue {
+        &mut self.time_management_commands
     }
 }
 

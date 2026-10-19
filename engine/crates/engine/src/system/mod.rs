@@ -20,14 +20,16 @@ mod asset_load_command;
 mod audio_command_system;
 mod audio_command;
 mod job;
+mod time_management;
 
 pub use api::{
-    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi, JobApi,
+    AssetApi, EntityApi, InputApi, ObjectApi, RenderCommandApi, SceneCommandApi, TimeApi, AssetLoadApi, AudioApi, JobApi, 
+    TimeManagementApi,
 };
 pub use command::{
     Command, CommandContext, CommandSystem, CreatePrimitiveCommand, DebugMonitor,
     DespawnLastCommand, SpawnPrimitiveCommand, SpawnVikingRoomCommand,
-    UpdatePrimitiveMeshesCommand,
+    UpdatePrimitiveMeshesCommand, DebugPauseCommand,
 };
 pub use input_system::{CommandQueue, CommandRef, InputSystem, InputTrigger, KeyBinding};
 pub use render_command::{RenderCommand, RenderCommandQueue};
@@ -44,3 +46,4 @@ pub use audio_command::{AudioCommand, AudioCommandQueue, AudioBusSettings, Audio
 pub use audio_command_system::{AudioCommandSystem};
 pub use job::{JobSystem, JobSystemHandle, JobScope};
 pub use job::{JobId, JobInfo, JobProfiler, JobRunSegment, WorkerHistory, WorkerId, FiberId};
+pub use time_management::{TimeManagementCommand, TimeManagementCommandQueue, TimeManager};

@@ -16,6 +16,7 @@ mod time_api;
 mod asset_load_api;
 mod audio_api;
 mod job_api;
+mod time_management_api;
 
 pub use asset_api::AssetApi;
 pub use entity_api::EntityApi;
@@ -27,4 +28,5 @@ pub use time_api::TimeApi;
 pub use asset_load_api::AssetLoadApi;
 pub use audio_api::AudioApi;
 pub use job_api::JobApi;
+pub use time_management_api::TimeManagementApi;
 pub(crate) use job_api::register_job_system;

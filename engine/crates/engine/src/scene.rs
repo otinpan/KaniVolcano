@@ -104,13 +104,27 @@ impl<'a> SceneContext<'a> {
         self.scheduler.bind_key(key, trigger, command);
     }
 
-    // insert UpdateSystem to Scheduler
+    /// Registers controls that remain active while paused, such as Resume and Step.
+    pub fn bind_debug_input_command<C>(
+        &mut self,
+        key: winit::keyboard::KeyCode,
+        trigger: InputTrigger,
+        command: C,
+    ) where
+        C: Command + 'static,
+    {
+        self.scheduler.bind_debug_key(key, trigger, command);
+    }
+
+    /// Registers a per-frame system using wall time, including while paused.
+    /// Suitable for free cameras and debug displays.
     pub fn add_update_system<S>(&mut self, name: &str, system: S)
     where
         S: UpdateSystem + 'static,
     {
         self.scheduler.add_update_system(name, system);
     }
+    /// Registers a fixed-tick system controlled by Pause, Resume, and Step.
     pub fn add_fixed_update_system<S>(&mut self, name: &str, system: S)
     where 
         S: UpdateSystem + 'static,

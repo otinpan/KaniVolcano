@@ -3,7 +3,7 @@ use cgmath::{vec3,vec2};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_math::Transform;
 use winit::keyboard::KeyCode;
-use crate::{ThreadProfilerBootstrap};
+use crate::{ThreadProfilerBootstrap, ChangeSceneCommand};
 pub struct BasicFieldScene {
     scene_id: SceneId,
 }
@@ -107,14 +107,14 @@ impl BasicFieldScene {
 
     fn bind_input_commands(&mut self, context: &mut SceneContext<'_>) {
         context.bind_input_command(
-            KeyCode::Space,
+            KeyCode::Digit0,
             InputTrigger::Pressed,
             ChangeSceneCommand {
                 next_scene: "AudioScene".to_string(),
             },
         );
         context.bind_input_command(
-            KeyCode::Digit0,
+            KeyCode::Space,
             InputTrigger::Pressed,
             LoadAssetsCommand,
         );
@@ -164,20 +164,6 @@ impl Default for BasicFieldScene {
     }
 }
 
-pub struct ChangeSceneCommand {
-    pub next_scene: String,
-}
-
-impl Command for ChangeSceneCommand {
-    fn id(&self) -> String {
-        format!("change_scene")
-    }
-
-    fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
-        context.set_current_scene(self.next_scene.as_str());
-        Ok(())
-    }
-}
 
 pub struct LoadAssetsCommand;
 

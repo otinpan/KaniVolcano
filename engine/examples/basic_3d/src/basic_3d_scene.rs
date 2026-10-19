@@ -599,7 +599,7 @@ impl Basic3dScene {
             },
         );
         context.bind_input_command(
-            KeyCode::Space,
+            KeyCode::Digit0,
             InputTrigger::Pressed,
             ChangeSceneCommand {
                 next_scene: "BasicFieldScene".to_string(),

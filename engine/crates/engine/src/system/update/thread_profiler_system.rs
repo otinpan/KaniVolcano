@@ -444,6 +444,7 @@ mod tests {
         let mut assets = crate::AssetLoadCommandQueue::default();
         let mut audio = crate::AudioCommandQueue::default();
         let mut scene = crate::SceneCommandQueue::default();
+        let mut time_management=crate::TimeManagementCommandQueue::default();
         let mut context = UpdateContext::new(
             &mut world,
             &input,
@@ -453,6 +454,7 @@ mod tests {
             &mut assets,
             &mut audio,
             &mut scene,
+            &mut time_management,
         );
         test(&mut context, rect, line);
     }

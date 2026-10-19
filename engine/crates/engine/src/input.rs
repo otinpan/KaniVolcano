@@ -19,6 +19,20 @@ pub struct Input {
 }
 
 impl Input {
+    /// Keeps transitions until a simulation tick consumes them, including frames
+    /// where no fixed update runs. Held state always follows the latest frame.
+    pub(crate) fn accumulate_frame(&mut self, frame: &Input) {
+        self.keys_down.clone_from(&frame.keys_down);
+        self.keys_pressed.extend(&frame.keys_pressed);
+        self.keys_released.extend(&frame.keys_released);
+        self.mouse_position = frame.mouse_position;
+        self.mouse_delta += frame.mouse_delta;
+        self.window_size = frame.window_size;
+        self.mouse_buttons_down.clone_from(&frame.mouse_buttons_down);
+        self.mouse_buttons_pressed.extend(&frame.mouse_buttons_pressed);
+        self.mouse_buttons_released.extend(&frame.mouse_buttons_released);
+    }
+
     pub fn clear_transitions(&mut self) {
         self.keys_pressed.clear();
         self.keys_released.clear();
@@ -150,6 +164,27 @@ impl Default for Input {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn simulation_input_keeps_transitions_until_consumed_once() {
+        let mut frame = Input::default();
+        let mut simulation = Input::default();
+        frame.press_key(KeyCode::Space);
+        frame.set_mouse_position(vec2(5.0, 3.0));
+        simulation.accumulate_frame(&frame);
+        frame.clear_transitions();
+        simulation.accumulate_frame(&frame);
+        assert!(simulation.key_pressed(KeyCode::Space));
+        assert_eq!(simulation.mouse_delta(), vec2(5.0, 3.0));
+        simulation.clear_transitions();
+        assert!(!simulation.key_pressed(KeyCode::Space));
+        assert!(simulation.key_down(KeyCode::Space));
+        assert_eq!(simulation.mouse_delta(), vec2(0.0, 0.0));
+        frame.release_key(KeyCode::Space);
+        simulation.accumulate_frame(&frame);
+        assert!(simulation.key_released(KeyCode::Space));
+        assert!(!simulation.key_down(KeyCode::Space));
+    }
 
     #[test]
     fn key_press_sets_down_and_pressed() {
