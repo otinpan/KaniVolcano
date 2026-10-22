@@ -108,3 +108,6 @@ Create Debug Puase feature
 Fixed inconsistencies between vertex generation and index calculations in the sphere mesh.
 * Corrected the loop ranges to prevent twisted geometry caused by incorrect vertex connections.
 * Also standardized the sphere's coordinate system to Y-up.
+
+## v0.5.2
+Added a `DrawOrder` component that allows users to control the rendering order of UI elements using the `Ui2D` pipeline.

@@ -355,6 +355,27 @@ let hello_kani_volcano = context.spawn_text_3d(
 
 ![](../../../assets/tutorial_font3d_2.png)
 
+## Draw Order
+
+For 3D objects, rendering order is determined by their position relative to the camera. In contrast, UI2D shapes and text require an explicitly defined draw order.
+
+If no draw order is specified, UI2D elements are rendered in the order they were created, which may result in unintended overlapping.
+
+You can control the rendering order using the following API:
+
+```rust
+context.set_draw_order(entity: EntityId, order: i32)
+```
+
+For example:
+
+```rust
+context.set_draw_order(background, -100);
+context.set_draw_order(button, 10);
+context.set_draw_order(popup, 100);
+```
+
+Elements with higher draw order values are rendered on top of those with lower values.
 
 ## Reusing Existing Primitive Meshes
 

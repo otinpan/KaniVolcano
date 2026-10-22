@@ -16,6 +16,7 @@ mod rotator;
 mod scene_owned;
 mod tags;
 mod text;
+mod draw_order;
 mod visibility;
 
 pub use audio::AudioSource;
@@ -31,6 +32,7 @@ pub use scene_owned::{SceneId, SceneOwned};
 pub use tags::Tags;
 pub use text::{Text,TextPipeline};
 pub use visibility::Visibility;
+pub use draw_order::DrawOrder;
 
 // Component does not have short reference like &'a str, &String
 pub trait Component: 'static {}

@@ -5,6 +5,7 @@ use renderer_vulkan::PipelineKey;
 
 use crate::{
     AssetApi, EntityApi, EntityId, Material, MeshAssetId, MeshRenderer, PrimitiveShape, Visibility,
+    DrawOrder,
 };
 use crate::{
     Text, TextPipeline,
@@ -500,5 +501,9 @@ pub trait ObjectApi: EntityApi + AssetApi {
             None,
             PipelineKey::Ui2D,
         )
+    }
+
+    fn set_draw_order(&mut self, entity: EntityId, order: i32) {
+        self.add_component(entity, DrawOrder(order));
     }
 }

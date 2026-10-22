@@ -493,6 +493,9 @@ fn sorted_render_indices(data: &VulkanData) -> Vec<usize> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    // Draw lower orders first; preserve the existing order for equal values.
+    ui_indices.sort_by_key(|&index| data.render_objects[index].draw_order);
+
     let mut sorted_indices = opaque_indices;
     sorted_indices.extend(transparent_indices);
     sorted_indices.extend(ui_indices);

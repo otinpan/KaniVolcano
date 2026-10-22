@@ -529,6 +529,19 @@ let hello_kani_volcanoe=context.spawn_text_3d(
 
 ![](../../../assets/tutorial_font3d_2.png)
 
+## 描画順序
+3Dに関しては、カメラとの位置関係から描画順序が決まります。対して、Ui2Dの図形やテキストは描画順序は指定する必要があります。描画順序を指定しないと、生成された順番に描画されてしまい、意図しない描画順序で表示されてしまいます。
+
+```rust
+context.set_draw_order(entity: EntityId, order: i32)
+```
+
+```rust
+context.set_draw_order(background, -100);
+context.set_draw_order(button, 10);
+context.set_draw_order(popup, 100);
+```
+
 ## MeshAssetIdを指定して描画
 `spawn_primitive_from_mesh()`は`MeshAssetId`を指定し、すでに生成されたMeshを使って基本図形を複製することができます。
 ```rust

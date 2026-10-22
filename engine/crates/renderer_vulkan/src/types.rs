@@ -175,6 +175,7 @@ pub struct RenderItem {
     pub texture_index: TextureHandle, // use Texture from VulkanData::textures
     pub pipeline_key: PipelineKey,
     pub is_visible: bool,
+    pub draw_order: i32,
 }
 
 #[derive(Clone,Debug)]

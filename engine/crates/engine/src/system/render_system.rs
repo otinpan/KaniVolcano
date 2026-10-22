@@ -8,7 +8,7 @@ use renderer_vulkan::{
 use super::render_command::{RenderCommand, RenderCommandQueue};
 use crate::AssetApi;
 use crate::primitive::{PrimitiveMesh, create_primitive_with_layout, update_primitive_mesh};
-use crate::{EntityId, MeshAssetId, Resources, World};
+use crate::{EntityId, MeshAssetId, Resources, World, DrawOrder};
 
 use crate::component::{Camera, Component, MeshRenderer, PendingPrimitiveMesh, Visibility};
 
@@ -182,6 +182,9 @@ impl RenderSystem {
                 is_visible: context
                     .get_component::<Visibility>(entity)
                     .is_none_or(|visibility| visibility.is_visible),
+                draw_order: context
+                    .get_component::<DrawOrder>(entity)
+                    .map_or(0, |draw_order| draw_order.0),
             })
             .collect::<Vec<_>>();
 

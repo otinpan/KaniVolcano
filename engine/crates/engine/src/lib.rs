@@ -23,6 +23,7 @@ pub use app::App;
 pub use component::{
     Camera, CameraComponent, Component, Material, MeshRenderer, Name, PendingPrimitiveMesh,
     Rotator, SceneId, SceneOwned, Tags, Visibility, Text, TextPipeline, AudioSource,
+    DrawOrder,
 };
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
@@ -62,6 +63,7 @@ pub mod prelude {
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
         AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle, DebugPauseCommand,
+        DrawOrder,
     };
 
     pub use kani_volcano_math::Transform;
