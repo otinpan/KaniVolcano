@@ -103,3 +103,8 @@ Create JobSystem
 Create Debug Puase feature
 * Users can pause/resume using TimeManagerApi
 * Systems registerd in `add_fixed_update_system()` or commands  registerd in `bind_debubg_command()` can be affected.
+
+## ver0.5.1
+Fixed inconsistencies between vertex generation and index calculations in the sphere mesh.
+* Corrected the loop ranges to prevent twisted geometry caused by incorrect vertex connections.
+* Also standardized the sphere's coordinate system to Y-up.

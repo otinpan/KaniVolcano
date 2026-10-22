@@ -515,19 +515,20 @@ fn build_sphere_source(radius: f32, rings: u32, segments: u32, color: Vec3) -> S
     let mut vertices = Vec::with_capacity(vertex_count as usize);
     let mut indices = Vec::with_capacity(index_count as usize);
 
-    for ring in 0..rings {
+    for ring in 0..=rings {
         let v = ring as f32 / rings as f32;
         let theta = std::f32::consts::PI * v;
 
-        for segment in 0..segments {
+        for segment in 0..=segments {
             let u = segment as f32 / segments as f32;
             let phi = std::f32::consts::TAU * u;
 
             let x = radius * theta.sin() * phi.cos();
-            let y = radius * theta.sin() * phi.sin();
-            let z = radius * theta.cos();
+            let y = radius * theta.cos();
+            let z = radius * theta.sin() * phi.sin();
+
             let position = vec3(x, y, z);
-            let normal = normalized_or(position, vec3(0.0, 0.0, 1.0));
+            let normal = normalized_or(position, vec3(0.0, 1.0, 0.0));
 
             vertices.push(SourceVertex::new(position, color, vec2(u, v), normal));
         }
@@ -541,15 +542,18 @@ fn build_sphere_source(radius: f32, rings: u32, segments: u32, color: Vec3) -> S
             let b = a + columns;
             let c = b + 1;
             let d = a + 1;
+
             indices.extend_from_slice(&[a, b, d, d, b, c]);
         }
     }
+
     SourceMesh {
         vertices,
         indices,
         topology: SourceTopology::TriangleList,
     }
 }
+
 
 fn build_line_source(pos0: Vec3, pos1: Vec3, color: Vec3) -> SourceMesh {
     let normal = vec3(1.0, 0.0, 0.0);
