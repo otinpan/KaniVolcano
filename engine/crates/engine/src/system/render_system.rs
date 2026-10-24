@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use kani_volcano_math::Transform;
 use renderer_vulkan::{
     RenderCamera, RenderItem, SkyboxTextureHandle, VulkanRenderer,
-    TextRenderItem,
+    TextRenderItem, Msaa,
 };
 
 use super::render_command::{RenderCommand, RenderCommandQueue};
@@ -71,6 +71,10 @@ impl<'a> RenderContext<'a> {
 
     pub(crate) fn set_camera(&mut self, camera: RenderCamera) {
         self.renderer.set_camera(camera);
+    }
+
+    pub(crate) fn set_msaa(&mut self, msaa: Msaa) -> Result<()>{
+        self.renderer.set_msaa(msaa)
     }
 
     pub(crate) unsafe fn create_text_mesh(
@@ -273,6 +277,9 @@ impl RenderSystem {
                 RenderCommand::SetSkybox { mesh, texture } => unsafe {
                     context.set_skybox(mesh, texture)?;
                 },
+                RenderCommand::SetMsaa { samples } => {
+                    context.set_msaa(samples)?;
+                }
             }
         }
 

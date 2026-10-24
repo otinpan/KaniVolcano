@@ -152,20 +152,20 @@ pub fn get_swapchain_extent(
 // A framebuffer binds actual image views to the attachments
 // described by a render pass
 pub unsafe fn create_framebuffers(device: &Device, data: &mut VulkanData) -> Result<()> {
-    data.framebuffers = data
-        .swapchain_image_views
-        .iter()
-        .map(|i| {
-            let attachments = &[data.color_image_view, data.depth_image_view, *i];
-            let create_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(data.render_pass)
-                .attachments(attachments)
-                .width(data.swapchain_extent.width)
-                .height(data.swapchain_extent.height)
-                .layers(1);
-            device.create_framebuffer(&create_info, None)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    for i in &data.swapchain_image_views {
+        let attachments = if data.msaa_samples == vk::SampleCountFlags::_1 {
+            vec![*i, data.depth_image_view]
+        } else {
+            vec![data.color_image_view, data.depth_image_view, *i]
+        };
+        let create_info = vk::FramebufferCreateInfo::builder()
+            .render_pass(data.render_pass)
+            .attachments(&attachments)
+            .width(data.swapchain_extent.width)
+            .height(data.swapchain_extent.height)
+            .layers(1);
+        data.framebuffers.push(device.create_framebuffer(&create_info, None)?);
+    }
 
     Ok(())
 }

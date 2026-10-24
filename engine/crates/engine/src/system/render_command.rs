@@ -1,4 +1,4 @@
-use renderer_vulkan::{MeshHandle, SkyboxTextureHandle};
+use renderer_vulkan::{MeshHandle, SkyboxTextureHandle, Msaa};
 
 use crate::{EntityId, MeshAssetId, PrimitiveShape};
 
@@ -17,6 +17,9 @@ pub enum RenderCommand {
     SetSkybox {
         mesh: MeshHandle,
         texture: SkyboxTextureHandle,
+    },
+    SetMsaa{
+        samples: Msaa
     },
 }
 
@@ -45,9 +48,14 @@ impl RenderCommandQueue {
             .push(RenderCommand::SetSkybox { mesh, texture });
     }
 
+    pub fn set_msaa(&mut self, msaa: Msaa){
+        self.commands
+            .push(RenderCommand::SetMsaa{ samples: msaa });
+    }
     pub fn drain(&mut self) -> impl Iterator<Item = RenderCommand> + '_ {
         self.commands.drain(..)
     }
+
 }
 
 impl Default for RenderCommandQueue {

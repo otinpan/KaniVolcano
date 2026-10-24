@@ -31,3 +31,35 @@ context.update_primitive_mesh(
 
 ここでは、`context.primitive_asset_id(PrimtiveType, VertexLayout)`で`PrimitiveType`がPolygonで`VertexLayout`が`Mesh3D`のメッシュを探します。
 見つけたメッシュに対して、新しく図形を更新します。
+
+## MSAAの指定
+MSAAとはグラフィックスの描画に置いて、物体の斜めや曲線の輪郭に生じる階段状のギザギザを滑らかにする技術のことです。RenderCommandApiからこれを指定することが出来ます。
+```rust
+pub enum Msaa {
+    X1,
+    X2,
+    X4,
+    X8,
+    X16,
+    X32,
+    X64,
+}
+```rust
+// from app
+app.set_msaa(Msaa::X4);
+```
+
+```rust
+// from system, scene and context
+context.set_msaa(Msaa::X4);
+```
+
+数値を上げるほど、VRAMとGPUの処理不可が増加し、FPSが低下しやすくなります。
+非対応の値を指定した場合はエラーを返し、現在のMSAAの設定を維持するようにしています。
+
+デフォルトでは、GPUカラー・深度の両方が対応する最大サンプル数です。
+
+MSAAを取得するには`app.msaa()`を使用します。
+```rust
+let current_msaa: Msaa=app.msaa();
+```

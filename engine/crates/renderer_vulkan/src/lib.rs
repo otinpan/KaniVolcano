@@ -100,6 +100,32 @@ pub struct VulkanRenderer {
     fonts: Vec<LoadedFont>,
 }
 
+/// Requested sample count. Unsupported values are rejected by `set_msaa`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Msaa {
+    X1,
+    X2,
+    X4,
+    X8,
+    X16,
+    X32,
+    X64,
+}
+
+impl Msaa {
+    fn to_vk(self) -> vk::SampleCountFlags {
+        match self {
+            Self::X1 => vk::SampleCountFlags::_1,
+            Self::X2 => vk::SampleCountFlags::_2,
+            Self::X4 => vk::SampleCountFlags::_4,
+            Self::X8 => vk::SampleCountFlags::_8,
+            Self::X16 => vk::SampleCountFlags::_16,
+            Self::X32 => vk::SampleCountFlags::_32,
+            Self::X64 => vk::SampleCountFlags::_64,
+        }
+    }
+}
+
 impl VulkanRenderer {
     pub unsafe fn create(window: &Window) -> Result<Self> {
         let entry = create_entry()?;
@@ -527,6 +553,89 @@ impl VulkanRenderer {
         self.data.camera = camera;
     }
 
+    /// Returns the currently applied sample count.
+    pub fn msaa(&self) -> Msaa {
+        match self.data.msaa_samples {
+            vk::SampleCountFlags::_1 => Msaa::X1,
+            vk::SampleCountFlags::_2 => Msaa::X2,
+            vk::SampleCountFlags::_4 => Msaa::X4,
+            vk::SampleCountFlags::_8 => Msaa::X8,
+            vk::SampleCountFlags::_16 => Msaa::X16,
+            vk::SampleCountFlags::_32 => Msaa::X32,
+            vk::SampleCountFlags::_64 => Msaa::X64,
+            _ => unreachable!("renderer must have a valid MSAA sample count"),
+        }
+    }
+
+    /// Changes MSAA synchronously between calls to `render`.
+    /// Waits for the GPU; call only when the quality setting changes.
+    /// X1 disables MSAA. Unsupported counts leave the renderer unchanged.
+    pub fn set_msaa(&mut self, samples: Msaa) -> Result<()> {
+        let samples = samples.to_vk();
+        if samples == self.data.msaa_samples {
+            return Ok(());
+        }
+        unsafe {
+            let limits = self.instance
+                .get_physical_device_properties(self.data.physical_device).limits;
+            let supported = limits.framebuffer_color_sample_counts
+                & limits.framebuffer_depth_sample_counts;
+            anyhow::ensure!(supported.contains(samples), "unsupported MSAA sample count: {:?}", samples);
+            let depth_format = image::get_depth_format(&self.instance, &self.data)?;
+            for (format, usage) in [
+                (self.data.swapchain_format, vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT),
+                (depth_format, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT),
+            ] {
+                let properties = self.instance.get_physical_device_image_format_properties(
+                    self.data.physical_device, format, vk::ImageType::_2D,
+                    vk::ImageTiling::OPTIMAL, usage, vk::ImageCreateFlags::empty(),
+                )?;
+                anyhow::ensure!(properties.sample_counts.contains(samples),
+                    "MSAA sample count {:?} is unsupported for format {:?}", samples, format);
+            }
+
+            // Borrow only the creation context. The remaining handles belong to
+            // this temporary set until it is committed below.
+            let mut next = VulkanData {
+                physical_device: self.data.physical_device,
+                msaa_samples: samples,
+                swapchain_format: self.data.swapchain_format,
+                swapchain_extent: self.data.swapchain_extent,
+                swapchain_image_views: self.data.swapchain_image_views.clone(),
+                global_descriptor_set_layout: self.data.global_descriptor_set_layout,
+                material_descriptor_set_layout: self.data.material_descriptor_set_layout,
+                light_descriptor_set_layout: self.data.light_descriptor_set_layout,
+                skybox_descriptor_set_layout: self.data.skybox_descriptor_set_layout,
+                ..VulkanData::default()
+            };
+            self.device.device_wait_idle()?;
+            let result = (|| -> Result<()> {
+                create_render_pass(&self.instance, &self.device, &mut next)?;
+                create_pipelines(&self.device, &mut next)?;
+                create_color_objects(&self.instance, &self.device, &mut next)?;
+                create_depth_objects(&self.instance, &self.device, &mut next)?;
+                create_framebuffers(&self.device, &mut next)?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                destroy_render_targets(&self.device, &mut next);
+                return Err(error);
+            }
+            // render() resets and records each image's command pool before use.
+            macro_rules! swap_field {
+                ($($field:ident),+ $(,)?) => { $(
+                    std::mem::swap(&mut self.data.$field, &mut next.$field);
+                )+ };
+            }
+            swap_field!(msaa_samples, render_pass, pipelines, framebuffers,
+                color_image, color_image_memory, color_image_view,
+                depth_image, depth_image_memory, depth_image_view);
+            destroy_render_targets(&self.device, &mut next);
+        }
+        Ok(())
+    }
+
     // font /////////////////////////////////////////////////////////////////////////////
     /* let data = std::fs::read(&path).context("failed to read font file")?;
     let font = system.load_font(data)?; */
@@ -788,4 +897,22 @@ unsafe fn create_pipelines(device: &Device, data: &mut VulkanData) -> Result<()>
     create_skybox_pipeline(device, data)?;
 
     Ok(())
+}
+
+// Destroys only the owned MSAA-dependent resources, including partial builds.
+unsafe fn destroy_render_targets(device: &Device, data: &mut VulkanData) {
+    for framebuffer in data.framebuffers.drain(..) {
+        device.destroy_framebuffer(framebuffer, None);
+    }
+    for pipeline in data.pipelines.drain(..) {
+        device.destroy_pipeline(pipeline.pipeline, None);
+        device.destroy_pipeline_layout(pipeline.layout, None);
+    }
+    device.destroy_render_pass(data.render_pass, None);
+    device.destroy_image_view(data.color_image_view, None);
+    device.destroy_image(data.color_image, None);
+    device.free_memory(data.color_image_memory, None);
+    device.destroy_image_view(data.depth_image_view, None);
+    device.destroy_image(data.depth_image, None);
+    device.free_memory(data.depth_image_memory, None);
 }

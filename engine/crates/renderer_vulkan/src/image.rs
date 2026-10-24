@@ -1069,6 +1069,12 @@ pub unsafe fn create_color_objects(
     device: &Device,
     data: &mut VulkanData,
 ) -> Result<()> {
+    if data.msaa_samples == vk::SampleCountFlags::_1 {
+        data.color_image = vk::Image::null();
+        data.color_image_memory = vk::DeviceMemory::null();
+        data.color_image_view = vk::ImageView::null();
+        return Ok(());
+    }
     let (color_image, color_image_memory) = create_image(
         instance,
         device,

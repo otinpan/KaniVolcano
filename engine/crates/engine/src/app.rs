@@ -2,6 +2,7 @@ use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
+    Msaa,
 };
 use kani_volcano_audio::{
     AudioSystem,
@@ -421,6 +422,17 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Returns the currently applied MSAA setting, excluding queued changes.
+    pub fn msaa(&self) -> Msaa {
+        self.renderer.msaa()
+    }
+
+    /// Queues an MSAA change for the next render stage.
+    /// Unsupported settings are reported when the command is executed.
+    pub fn set_msaa(&mut self, msaa: Msaa) {
+        self.scheduler.render_commands.set_msaa(msaa);
     }
 
 }

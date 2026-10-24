@@ -1167,6 +1167,7 @@ pub unsafe fn create_render_pass(
     device: &Device,
     data: &mut VulkanData,
 ) -> Result<()> {
+    let multisampled = data.msaa_samples != vk::SampleCountFlags::_1;
     let color_attachment = vk::AttachmentDescription::builder()
         .format(data.swapchain_format)
         .samples(data.msaa_samples)
@@ -1175,7 +1176,11 @@ pub unsafe fn create_render_pass(
         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
         .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
-        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+        .final_layout(if multisampled {
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        } else {
+            vk::ImageLayout::PRESENT_SRC_KHR
+        });
 
     let depth_stencil_attachment = vk::AttachmentDescription::builder()
         .format(get_depth_format(instance, data)?)
@@ -1212,11 +1217,13 @@ pub unsafe fn create_render_pass(
 
     let color_attachments = &[color_attachment_ref];
     let resolve_attachments = &[color_resolve_attachment_ref];
-    let subpass = vk::SubpassDescription::builder()
+    let mut subpass = vk::SubpassDescription::builder()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         .color_attachments(color_attachments)
-        .depth_stencil_attachment(&depth_stencil_attachment_ref)
-        .resolve_attachments(resolve_attachments);
+        .depth_stencil_attachment(&depth_stencil_attachment_ref);
+    if multisampled {
+        subpass = subpass.resolve_attachments(resolve_attachments);
+    }
 
     // Dependencies
     let dependency = vk::SubpassDependency::builder()
@@ -1237,7 +1244,7 @@ pub unsafe fn create_render_pass(
         );
 
     // Create
-    let attachments = &[
+    let attachments = [
         color_attachment,
         depth_stencil_attachment,
         color_resolve_attachment,
@@ -1245,7 +1252,7 @@ pub unsafe fn create_render_pass(
     let subpasses = &[subpass];
     let dependencies = &[dependency];
     let info = vk::RenderPassCreateInfo::builder()
-        .attachments(attachments)
+        .attachments(&attachments[..if multisampled { 3 } else { 2 }])
         .subpasses(subpasses)
         .dependencies(dependencies);
 

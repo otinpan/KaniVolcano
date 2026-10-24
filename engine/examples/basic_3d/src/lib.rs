@@ -14,7 +14,7 @@ pub use system::{
     AudioSystem, MoveSystem, MoveRotateSystem, ParallelRotatorSystem,
 };
 pub use command::{
-    ChangeSceneCommand,
+    ChangeSceneCommand, ChangeMsaaCommand,
 };
 pub use audio_scene::{AudioScene};
 pub use basic_field_scene::{BasicFieldScene};

@@ -1,4 +1,4 @@
-use super::ChangeSceneCommand;
+use super::{ChangeSceneCommand, ChangeMsaaCommand};
 use anyhow::{Result, anyhow};
 use cgmath::{Vector2, Vector3, vec2, vec3};
 use kani_volcano_engine::prelude::*;
@@ -604,6 +604,27 @@ impl Basic3dScene {
             ChangeSceneCommand {
                 next_scene: "BasicFieldScene".to_string(),
             },
+        );
+        context.bind_input_command(
+            KeyCode::Digit1,
+            InputTrigger::Pressed,
+            ChangeMsaaCommand{
+                msaa: Msaa::X1,
+            },
+        );
+        context.bind_input_command(
+            KeyCode::Digit2,
+            InputTrigger::Pressed,
+            ChangeMsaaCommand{
+                msaa: Msaa::X4,
+            }
+        );
+        context.bind_input_command(
+            KeyCode::Digit3,
+            InputTrigger::Pressed,
+            ChangeMsaaCommand{
+                msaa: Msaa::X16,
+            }
         );
         context.bind_input_command(KeyCode::Enter, InputTrigger::Pressed, DebugMonitor);
     }

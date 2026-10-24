@@ -93,9 +93,13 @@ impl Command for CreateRectangleCommand{
 
 ## `SceneContext`
 `SceneContext`はSceneトレイトの`on_enter()`、`on_exit()`から使えます。`SceneContext`は以下のAPIを持ちます。
-* EntityAPI
-* AssetAPI
-* ObjectAPI
+* EntityApi
+* AssetApi
+* ObjectApi
+* RenderCommandApi
+* AssetLoadApi
+* AudioApi
+
 
 そのほかに以下のAPIを持ちます。
 ### `scene_id()`

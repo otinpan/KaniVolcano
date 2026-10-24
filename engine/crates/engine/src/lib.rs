@@ -28,7 +28,7 @@ pub use component::{
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
 pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
-pub use renderer_vulkan::{PipelineKey, VertexLayout};
+pub use renderer_vulkan::{Msaa, PipelineKey, VertexLayout};
 pub use resources::{
     MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
     AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource,
@@ -58,7 +58,7 @@ pub mod prelude {
     pub use crate::{
         App, AssetApi, AssetLoadApi, AudioApi, JobApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
-        ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
+        Msaa, ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, ThreadProfilerSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
