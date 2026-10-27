@@ -377,6 +377,63 @@ context.set_draw_order(popup, 100);
 
 Elements with higher draw order values are rendered on top of those with lower values.
 
+## Material Configuration
+
+Materials determine the visual appearance and surface properties of objects when rendered.
+
+```rust
+pub struct Material {
+    pub base_color: Vector4<f32>, // Base color (Supported)
+    pub base_color_texture: Option<TextureHandle>, // Base color texture (Supported)
+
+    // Surface properties
+    pub metallic: f32, // Metallic factor (Supported)
+    pub roughness: f32, // Surface roughness (Supported)
+    pub metallic_roughness_texture: Option<TextureHandle>, // Per-pixel roughness (G) and metallic (B) values (Not supported)
+
+    // Normal mapping (Not supported)
+    pub normal_texture: Option<TextureHandle>, // Normal map for surface detail
+    pub normal_scale: f32, // Normal map intensity
+
+    // Emission
+    pub emissive_color: Vector3<f32>, // Emissive color (Supported)
+    pub emissive_strength: f32, // Emissive intensity multiplier (Supported)
+    pub emissive_texture: Option<TextureHandle>, // Emissive texture (Not supported)
+
+    // Ambient occlusion
+    pub occlusion_strength: f32, // Controls the intensity of ambient occlusion (Not supported)
+
+    // Transparency (Not supported)
+    pub alpha_mode: AlphaMode, // Opaque, alpha masking, or alpha blending
+    pub alpha_cutoff: f32, // Alpha threshold for Mask mode
+
+    // Back-face rendering
+    pub double_sided: bool, // Enables or disables back-face culling (Not supported)
+
+    pub pipeline_key: PipelineKey,
+}
+
+pub enum AlphaMode {
+    Opaque,
+    Mask,
+    Blend,
+}
+```
+
+You can assign a material to an entity using `context.set_material()`:
+
+```rust
+context.set_material(entity, Material {
+    base_color,
+    base_color_texture,
+    metallic,
+    roughness,
+    ..Material::default()
+});
+```
+
+![Material Example](../../../assets/material.png)
+
 ## Reusing Existing Primitive Meshes
 
 You can get an existing primitive mesh and create another entity from it.

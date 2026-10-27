@@ -111,3 +111,45 @@ Fixed inconsistencies between vertex generation and index calculations in the sp
 
 ## v0.5.2
 Added a `DrawOrder` component that allows users to control the rendering order of UI elements using the `Ui2D` pipeline.
+
+## v0.6.0
+Change `Material` component.
+```rust
+pub struct Material {
+    pub base_color: Vector4<f32>, // Base color (Supported)
+    pub base_color_texture: Option<TextureHandle>, // Base color texture (Supported)
+
+    // Surface properties
+    pub metallic: f32, // Metallic factor (Supported)
+    pub roughness: f32, // Surface roughness (Supported)
+    pub metallic_roughness_texture: Option<TextureHandle>, // Per-pixel roughness (G) and metallic (B) values (Not supported)
+
+    // Normal mapping (Not supported)
+    pub normal_texture: Option<TextureHandle>, // Normal map for surface detail
+    pub normal_scale: f32, // Normal map intensity
+
+    // Emission
+    pub emissive_color: Vector3<f32>, // Emissive color (Supported)
+    pub emissive_strength: f32, // Emissive intensity multiplier (Supported)
+    pub emissive_texture: Option<TextureHandle>, // Emissive texture (Not supported)
+
+    // Ambient occlusion
+    pub occlusion_strength: f32, // Controls the intensity of ambient occlusion (Not supported)
+
+    // Transparency (Not supported)
+    pub alpha_mode: AlphaMode, // Opaque, alpha masking, or alpha blending
+    pub alpha_cutoff: f32, // Alpha threshold for Mask mode
+
+    // Back-face rendering
+    pub double_sided: bool, // Enables or disables back-face culling (Not supported)
+
+    pub pipeline_key: PipelineKey,
+}
+
+pub enum AlphaMode {
+    Opaque,
+    Mask,
+    Blend,
+}
+```
+![](../assets/material.png)
