@@ -178,11 +178,7 @@ impl RenderSystem {
             .map(|(entity, transform, mesh_renderer)| RenderItem {
                 mesh_index: mesh_renderer.mesh,
                 transform: transform.clone(),
-                alpha: mesh_renderer.material.alpha,
-                material_color: mesh_renderer.material.color,
-                use_texture: mesh_renderer.material.use_texture,
-                texture_index: mesh_renderer.material.texture,
-                pipeline_key: mesh_renderer.material.pipeline_key,
+                material: (&mesh_renderer.material).into(),
                 is_visible: context
                     .get_component::<Visibility>(entity)
                     .is_none_or(|visibility| visibility.is_visible),

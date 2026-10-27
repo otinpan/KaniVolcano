@@ -25,6 +25,43 @@ struct FragmentPushConstants {
     material_flags: [f32; 4],
 }
 
+// Matches pbr3d.frag at absolute offsets 64, 80 and 96.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct PbrMaterialPushConstants {
+    base_color: [f32; 4],
+    material_params: [f32; 4],
+    emissive: [f32; 4],
+}
+
+impl From<&super::types::RenderMaterial> for PbrMaterialPushConstants {
+    fn from(material: &super::types::RenderMaterial) -> Self {
+        Self {
+            base_color: material.base_color.into(),
+            material_params: [
+                material.metallic,
+                material.roughness,
+                if material.base_color_texture.is_some() { 1.0 } else { 0.0 },
+                0.0,
+            ],
+            emissive: [
+                material.emissive_color.x,
+                material.emissive_color.y,
+                material.emissive_color.z,
+                material.emissive_strength,
+            ],
+        }
+    }
+}
+
+// The raw byte upload requires exactly three contiguous vec4 values.
+const _: () = {
+    assert!(size_of::<PbrMaterialPushConstants>() == 48);
+    assert!(std::mem::offset_of!(PbrMaterialPushConstants, base_color) == 0);
+    assert!(std::mem::offset_of!(PbrMaterialPushConstants, material_params) == 16);
+    assert!(std::mem::offset_of!(PbrMaterialPushConstants, emissive) == 32);
+};
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct Ui2DTransformPushConstants {
@@ -230,7 +267,7 @@ pub unsafe fn update_command_buffer(
     }
     let visible_indices = sorted_render_indices(&renderer.data);
     let (ui_indices, world_indices): (Vec<_>, Vec<_>) = visible_indices.into_iter()
-        .partition(|&i| renderer.data.render_objects[i].pipeline_key == PipelineKey::Ui2D);
+        .partition(|&i| renderer.data.render_objects[i].material.pipeline_key == PipelineKey::Ui2D);
     secondary_command_buffers.extend(
         world_indices
             .into_iter()
@@ -472,7 +509,7 @@ fn sorted_render_indices(data: &VulkanData) -> Vec<usize> {
             continue;
         }
 
-        match object.pipeline_key {
+        match object.material.pipeline_key {
             PipelineKey::Skybox => continue,
             PipelineKey::Transparent3D => transparent_indices.push(index),
             PipelineKey::Ui2D => ui_indices.push(index),
@@ -536,11 +573,11 @@ unsafe fn update_secondary_command_buffer(
 
     //  Model
     let object = &renderer.data.render_objects[model_index];
-    if object.pipeline_key == PipelineKey::Skybox {
+    if object.material.pipeline_key == PipelineKey::Skybox {
         return Ok(command_buffer);
     }
 
-    let pipeline = renderer.data.pipeline(object.pipeline_key);
+    let pipeline = renderer.data.pipeline(object.material.pipeline_key);
     let Some(mesh) = renderer
         .data
         .meshes
@@ -557,12 +594,12 @@ unsafe fn update_secondary_command_buffer(
 
     let material = FragmentPushConstants {
         material_color: [
-            object.material_color.x,
-            object.material_color.y,
-            object.material_color.z,
-            object.alpha,
+            object.material.base_color.x,
+            object.material.base_color.y,
+            object.material.base_color.z,
+            object.material.base_color.w,
         ],
-        material_flags: [if object.use_texture { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
+        material_flags: [if object.material.base_color_texture.is_some() { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
     };
 
     let material_bytes = std::slice::from_raw_parts(
@@ -610,7 +647,7 @@ unsafe fn update_secondary_command_buffer(
     match pipeline.key {
         PipelineKey::Mesh3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.texture_index.0];
+            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
             let sets = [global_set, material_set];
 
             renderer.device.cmd_bind_descriptor_sets(
@@ -660,7 +697,7 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Transparent3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.texture_index.0];
+            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
             let sets = [global_set, material_set];
 
             renderer.device.cmd_bind_descriptor_sets(
@@ -689,7 +726,7 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Lit3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.texture_index.0];
+            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
             let light_set = renderer.data.light_descriptor_sets[image_index];
 
             let sets = [global_set, material_set, light_set];
@@ -719,7 +756,7 @@ unsafe fn update_secondary_command_buffer(
             );
         }
         PipelineKey::Ui2D => {
-            let material_set = renderer.data.material_descriptor_sets[object.texture_index.0];
+            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
             let sets = [material_set];
             let ui_transform = Ui2DTransformPushConstants {
                 transform: [
@@ -759,6 +796,43 @@ unsafe fn update_secondary_command_buffer(
                 material_bytes,
             );
         }
+        PipelineKey::Pbr3D => {
+            let pbr_global_set = renderer.data.pbr_global_descriptor_sets[image_index];
+            let material_set=renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let light_set = renderer.data.light_descriptor_sets[image_index];
+
+            let sets = [pbr_global_set, material_set, light_set];
+
+            renderer.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline.layout,
+                0,
+                &sets,
+                &[],
+            );
+
+            renderer.device.cmd_push_constants(
+                command_buffer,
+                pipeline.layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                model_bytes,
+            );
+
+            let pbr_material = PbrMaterialPushConstants::from(&object.material);
+            let pbr_material_bytes = std::slice::from_raw_parts(
+                &pbr_material as *const PbrMaterialPushConstants as *const u8,
+                size_of::<PbrMaterialPushConstants>(),
+            );
+            renderer.device.cmd_push_constants(
+                command_buffer,
+                pipeline.layout,
+                vk::ShaderStageFlags::FRAGMENT,
+                64,
+                pbr_material_bytes,
+            );
+        },
         PipelineKey::TextUi2D | PipelineKey::Text3D =>{
             renderer.device.end_command_buffer(command_buffer)?;
             return Ok(command_buffer);

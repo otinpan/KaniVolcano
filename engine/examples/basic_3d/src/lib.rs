@@ -1,5 +1,6 @@
 mod basic_3d_scene;
 mod basic_field_scene;
+mod material_scene;
 mod parallel_calculator_scene;
 mod audio_scene;
 mod component;
@@ -7,6 +8,7 @@ mod command;
 mod system;
 
 pub use basic_3d_scene::Basic3dScene;
+pub use material_scene::MaterialScene;
 pub use component::{
     MoveComponent,SphereColliderComponent, MoveRotateComponent
 };

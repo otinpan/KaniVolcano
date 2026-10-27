@@ -57,6 +57,26 @@ pub unsafe fn create_global_descriptor_set_layout(
     Ok(())
 }
 
+pub unsafe fn create_pbr_descriptor_set_layout(device: &Device, data: &mut VulkanData) -> Result<()>{
+    let bindings=[
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX),
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+    ];
+
+    let info=vk::DescriptorSetLayoutCreateInfo::builder().bindings(&bindings);
+    data.pbr_global_descriptor_set_layout=device.create_descriptor_set_layout(&info, None)?;
+
+    Ok(())
+}
+
 pub unsafe fn create_material_descriptor_set_layout(
     device: &Device,
     data: &mut VulkanData,
@@ -113,13 +133,15 @@ pub unsafe fn create_skybox_descriptor_set_layout(
 
 // create pool to record descriptor_set
 pub unsafe fn create_descriptor_pool(device: &Device, data: &mut VulkanData) -> Result<()> {
-    let uniform_descriptor_count = data.swapchain_images.len() * 2;
+    // Global + light + PBR global (view/projection and camera position).
+    let uniform_descriptor_count = data.swapchain_images.len() * 4;
     let skybox_descriptor_count = if data.skybox_textures.is_empty() {
         0
     } else {
         data.swapchain_images.len()
     };
     let max_sets = data.swapchain_images.len()
+        + data.swapchain_images.len() // PBR global sets
         + data.textures.len()
         + data.swapchain_images.len()
         + skybox_descriptor_count;
@@ -172,6 +194,65 @@ pub unsafe fn create_global_descriptor_sets(device: &Device, data: &mut VulkanDa
         device.update_descriptor_sets(&[ubo_write], &[] as &[vk::CopyDescriptorSet]);
     }
 
+    Ok(())
+}
+
+/// Requires an existing pool with room for one set and two UBO descriptors
+/// per swapchain image, plus initialized view/projection and camera buffers.
+pub unsafe fn create_pbr_global_descriptor_sets(
+    device: &Device,
+    data: &mut VulkanData,
+) -> Result<()> {
+    let image_count = data.swapchain_images.len();
+    anyhow::ensure!(image_count > 0, "PBR descriptor sets require swapchain images");
+    anyhow::ensure!(
+        data.uniform_buffers.len() == image_count
+            && data.pbr_camera_uniform_buffers.len() == image_count,
+        "PBR descriptor sets require view/projection and camera buffers for every swapchain image"
+    );
+    anyhow::ensure!(
+        data.pbr_global_descriptor_set_layout != vk::DescriptorSetLayout::null()
+            && data.descriptor_pool != vk::DescriptorPool::null(),
+        "PBR descriptor layout and pool must be created before allocating sets"
+    );
+    anyhow::ensure!(
+        data.uniform_buffers.iter().chain(&data.pbr_camera_uniform_buffers)
+            .all(|buffer| *buffer != vk::Buffer::null()),
+        "PBR descriptor sets cannot reference null uniform buffers"
+    );
+
+    let layouts = vec![data.pbr_global_descriptor_set_layout; image_count];
+    let info = vk::DescriptorSetAllocateInfo::builder()
+        .descriptor_pool(data.descriptor_pool)
+        .set_layouts(&layouts);
+    let descriptor_sets = device.allocate_descriptor_sets(&info)?;
+
+    for (i, &descriptor_set) in descriptor_sets.iter().enumerate() {
+        let global_infos = [vk::DescriptorBufferInfo::builder()
+            .buffer(data.uniform_buffers[i])
+            .offset(0)
+            .range(size_of::<UniformBufferObject>() as u64)];
+        // CameraUniform.worldPosition is a GLSL vec4 (16 bytes).
+        let camera_infos = [vk::DescriptorBufferInfo::builder()
+            .buffer(data.pbr_camera_uniform_buffers[i])
+            .offset(0)
+            .range(size_of::<[f32; 4]>() as u64)];
+        let writes = [
+            vk::WriteDescriptorSet::builder()
+                .dst_set(descriptor_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&global_infos),
+            vk::WriteDescriptorSet::builder()
+                .dst_set(descriptor_set)
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&camera_infos),
+        ];
+        device.update_descriptor_sets(&writes, &[] as &[vk::CopyDescriptorSet]);
+    }
+
+    data.pbr_global_descriptor_sets = descriptor_sets;
     Ok(())
 }
 
@@ -347,6 +428,65 @@ pub unsafe fn update_uniform_buffer(
     renderer
         .device
         .unmap_memory(renderer.data.uniform_buffers_memory[image_index]);
+    Ok(())
+}
+
+pub unsafe fn create_pbr_camera_uniform_buffers(
+    instance: &Instance,
+    device: &Device,
+    data: &mut VulkanData,
+) -> Result<()> {
+    anyhow::ensure!(
+        data.pbr_camera_uniform_buffers.is_empty()
+            && data.pbr_camera_uniform_buffers_memory.is_empty(),
+        "PBR camera buffers must be destroyed before recreation"
+    );
+    for _ in 0..data.swapchain_images.len() {
+        let allocation = create_buffer(
+            instance,
+            device,
+            data,
+            size_of::<[f32; 4]>() as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
+        );
+        let (buffer, memory) = match allocation {
+            Ok(allocation) => allocation,
+            Err(error) => {
+                for buffer in data.pbr_camera_uniform_buffers.drain(..) {
+                    device.destroy_buffer(buffer, None);
+                }
+                for memory in data.pbr_camera_uniform_buffers_memory.drain(..) {
+                    device.free_memory(memory, None);
+                }
+                return Err(error);
+            }
+        };
+        data.pbr_camera_uniform_buffers.push(buffer);
+        data.pbr_camera_uniform_buffers_memory.push(memory);
+    }
+    Ok(())
+}
+
+/// Call after waiting for this swapchain image's in-flight fence.
+pub unsafe fn update_pbr_camera_uniform_buffer(
+    renderer: &mut VulkanRenderer,
+    image_index: usize,
+) -> Result<()> {
+    let position = renderer.data.camera.position;
+    // Matches CameraUniform.worldPosition (vec4) in pbr3d.frag.
+    let camera_data = [position.x, position.y, position.z, 1.0];
+    let memory_handle = *renderer.data.pbr_camera_uniform_buffers_memory
+        .get(image_index)
+        .ok_or_else(|| anyhow::anyhow!("PBR camera buffer missing for image {image_index}"))?;
+    let memory = renderer.device.map_memory(
+        memory_handle,
+        0,
+        size_of::<[f32; 4]>() as u64,
+        vk::MemoryMapFlags::empty(),
+    )?;
+    memcpy(camera_data.as_ptr(), memory.cast::<f32>(), camera_data.len());
+    renderer.device.unmap_memory(memory_handle);
     Ok(())
 }
 

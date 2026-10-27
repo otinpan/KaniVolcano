@@ -23,7 +23,7 @@ pub use audio::AudioSource;
 pub use camera::Camera;
 pub use camera::Camera as CameraComponent;
 use kani_volcano_math::Transform;
-pub use material::Material;
+pub use material::{Material,AlphaMode};
 pub use mesh_renderer::MeshRenderer;
 pub use name::Name;
 pub use pending_primitive_mesh::PendingPrimitiveMesh;

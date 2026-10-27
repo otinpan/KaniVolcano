@@ -69,4 +69,8 @@ glslc `
 glslc `
     (Join-Path $ShaderDir "text_3d.frag") `
     -o (Join-Path $OutDir "text_3d_frag.spv")
+glslc (Join-Path $ShaderDir "pbr3d.vert") -o (Join-Path $OutDir "pbr3d_vert.spv")
+if ($LASTEXITCODE -ne 0) { throw "Pbr3D vertex shader compilation failed" }
+glslc (Join-Path $ShaderDir "pbr3d.frag") -o (Join-Path $OutDir "pbr3d_frag.spv")
+if ($LASTEXITCODE -ne 0) { throw "Pbr3D fragment shader compilation failed" }
 Write-Host "Shaders compiled to $OutDir"

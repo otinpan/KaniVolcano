@@ -481,17 +481,21 @@ impl Basic3dScene {
                 ..Default::default()
             },
             Material {
-                color: vec3(1.0, 0.0, 1.0),
-                alpha: 1.0,
-                use_texture: true,
-                texture: ghost_texture,
+                base_color: vec3(1.0, 0.0, 1.0).extend(1.0),
+                base_color_texture: Some(ghost_texture),
                 pipeline_key: PipelineKey::Lit3D,
+                ..Material::default()
             },
         );
         Ok(())
     }
 
     fn bind_input_commands(&mut self, context: &mut SceneContext<'_>) {
+        context.bind_input_command(
+            KeyCode::KeyM,
+            InputTrigger::Pressed,
+            ChangeSceneCommand { next_scene: "MaterialScene".to_string() },
+        );
         context.bind_input_command(
             KeyCode::ArrowLeft,
             InputTrigger::Pressed,

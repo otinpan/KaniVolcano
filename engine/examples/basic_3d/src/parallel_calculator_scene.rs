@@ -145,7 +145,6 @@ impl ParallelCalculatorScene {
         context: &mut UpdateContext<'_>,
         mesh_id: MeshAssetId,
     ) -> Result<()> {
-        let texture = context.default_texture();
         for _ in 0..2000 {
             let height = self.rng.random_range(1.0..5.0);
             let width = self.rng.random_range(0.5..2.0);
@@ -157,11 +156,10 @@ impl ParallelCalculatorScene {
             let obj = context.spawn_primitive_from_mesh(
                 mesh_id,
                 Material {
-                    color: vec3(0.7, 0.7, 0.7),
-                    alpha: 1.0,
-                    use_texture: false,
-                    texture: texture,
+                    base_color: vec3(0.7, 0.7, 0.7).extend(1.0),
+                    base_color_texture: None,
                     pipeline_key: PipelineKey::Mesh3D,
+                    ..Material::default()
                 },
                 Transform {
                     position: vec3(x, y, self.ground + z),
@@ -241,7 +239,7 @@ impl ParallelCalculatorScene {
             KeyCode::Digit0,
             InputTrigger::Pressed,
             ChangeSceneCommand {
-                next_scene: "Basic3dScene".to_string(),
+                next_scene: "MaterialScene".to_string(),
             },
         )
     }

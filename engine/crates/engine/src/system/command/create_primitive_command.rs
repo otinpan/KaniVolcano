@@ -38,11 +38,10 @@ impl Command for CreatePrimitiveCommand {
         };
 
         let material = Material {
-            color: self.color,
-            alpha: self.alpha,
-            use_texture: self.texture.is_some(),
-            texture,
+            base_color: self.color.extend(self.alpha),
+            base_color_texture: self.texture.is_some().then_some(texture),
             pipeline_key: self.pipeline_key,
+            ..Material::default()
         };
 
         context.spawn_shape_with_material(

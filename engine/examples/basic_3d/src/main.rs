@@ -10,7 +10,7 @@
 use anyhow::Result;
 use kani_volcano_engine::prelude::*;
 use kani_volcano_engine::{App, EngineConfig, run};
-use basic_3d::{Basic3dScene, BasicFieldScene,AudioScene,ParallelCalculatorScene};
+use basic_3d::{Basic3dScene, BasicFieldScene,AudioScene,ParallelCalculatorScene,MaterialScene};
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
@@ -27,8 +27,9 @@ fn main() -> Result<()> {
             app.add_scene(BasicFieldScene::default())?;
             app.add_scene(AudioScene::default())?;
             app.add_scene(ParallelCalculatorScene::default())?;
+            app.add_scene(MaterialScene::default())?;
 
-            app.set_current_scene("Basic3dScene")?;
+            app.set_current_scene("MaterialScene")?;
             Ok(())
         },
     )

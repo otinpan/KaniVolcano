@@ -152,11 +152,10 @@ impl ObjectApi for UpdateContext<'_> {
         };
 
         Ok(Material {
-            color,
-            alpha,
-            use_texture,
-            texture,
+            base_color: color.extend(alpha),
+            base_color_texture: use_texture.then_some(texture),
             pipeline_key,
+            ..Material::default()
         })
     }
 

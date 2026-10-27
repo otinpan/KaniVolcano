@@ -543,7 +543,8 @@ fn build_sphere_source(radius: f32, rings: u32, segments: u32, color: Vec3) -> S
             let c = b + 1;
             let d = a + 1;
 
-            indices.extend_from_slice(&[a, b, d, d, b, c]);
+            // Match the outward vertex normals and counter-clockwise front faces.
+            indices.extend_from_slice(&[a, d, b, d, c, b]);
         }
     }
 
@@ -655,7 +656,7 @@ pub unsafe fn spawn_triangle_with_material(
     let center = (p0 + p1 + p2) / 3.0;
     let shape = PrimitiveShape::Triangle {
         points: [p0 - center, p1 - center, p2 - center],
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -695,7 +696,7 @@ pub unsafe fn spawn_rectangle_with_material(
             vec3(0.0, half_width, -half_height),
             vec3(0.0, half_width, half_height),
         ],
-        color: material.color,
+        color: material.base_color.truncate(),
     };
     let transform = Transform {
         position: pos,
@@ -735,7 +736,7 @@ pub unsafe fn spawn_cube_with_material(
             vec3(-h, h, -h),
             vec3(-h, -h, -h),
         ],
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -769,7 +770,7 @@ pub unsafe fn spawn_circle_with_material(
     let shape = PrimitiveShape::Circle {
         radius,
         segments,
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -805,7 +806,7 @@ pub unsafe fn spawn_polygon_with_material(
     let local_points = points.iter().map(|p| *p - center).collect::<Vec<_>>();
     let shape = PrimitiveShape::Polygon {
         points: local_points,
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -839,7 +840,7 @@ pub unsafe fn spawn_sphere_with_material(
         radius,
         rings,
         segments,
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -870,7 +871,7 @@ pub unsafe fn spawn_line_with_material(
     let shape = PrimitiveShape::Line {
         pos0: pos0 - center,
         pos1: pos1 - center,
-        color: material.color,
+        color: material.base_color.truncate(),
     };
 
     let transform = Transform {
@@ -943,6 +944,25 @@ mod tests {
 
     fn white() -> Vec3 {
         vec3(1.0, 1.0, 1.0)
+    }
+
+    #[test]
+    fn sphere_triangle_winding_matches_outward_normals() {
+        let sphere = build_sphere_source(1.0, 16, 24, vec3(1.0, 1.0, 1.0));
+        let mut checked = 0;
+        for triangle in sphere.indices.chunks_exact(3) {
+            let a = sphere.vertices[triangle[0] as usize].pos;
+            let b = sphere.vertices[triangle[1] as usize].pos;
+            let c = sphere.vertices[triangle[2] as usize].pos;
+            let face = (b - a).cross(c - a);
+            // UV sphere poles contain degenerate triangles.
+            if face.magnitude2() < 1e-10 {
+                continue;
+            }
+            assert!(face.dot(a + b + c) > 0.0, "sphere triangle faces inward");
+            checked += 1;
+        }
+        assert!(checked > 0);
     }
 
     #[test]

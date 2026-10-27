@@ -542,6 +542,62 @@ context.set_draw_order(button, 10);
 context.set_draw_order(popup, 100);
 ```
 
+## Materialの指定
+Materialはオブジェクト描画時の質感を決定します。
+```rust
+pub struct Material {
+    pub base_color: Vector4<f32>, // 基本色 (対応)
+    pub base_color_texture: Option<TextureHandle>, // 基本色の画像 (対応)
+    
+    // 質感
+    pub metallic: f32, // 金属感 (対応)
+    pub roughness: f32, // 表面の粗さ (対応)
+    pub metallic_roughness_texture: Option<TextureHandle>, // 場所ごとの金属感や粗さ G:粗さ、B:金属感 (未対応)
+
+    // 凹凸 (未対応)
+    pub normal_texture: Option<TextureHandle>, // 表面の凹凸
+    pub normal_scale: f32, // 法線マップの強さ
+
+    // 自発光
+    pub emissive_color: Vector3<f32>, // 発光色 (対応)
+    pub emissive_strength: f32, // 倍率 (対応)
+    pub emissive_texture: Option<TextureHandle>, // 発光色の画像 (未対応)
+
+    // 遮蔽によって間接光を弱める効果の強さ
+    pub occlusion_strength: f32, // (未対応)
+
+    // 透明感 (未対応)
+    pub alpha_mode: AlphaMode, // 不透明・切り抜き・半透明から選択
+    pub alpha_cutoff: f32, // Maskの切り抜き境界値 
+
+    // 裏面描画on/off
+    pub double_sided: bool, // (未対応)
+
+    pub pipeline_key: PipelineKey,
+}
+
+pub enum AlphaMode{
+    Opaque,
+    Mask,
+    Blend,
+}
+```
+
+```rust
+context.set_materila(entity, Material{
+    base_color,
+    base_texture,
+    metallic,
+    roughness,
+    ..Material::default()
+})
+```
+
+![](../../../assets/material.png)
+
+
+
+
 ## MeshAssetIdを指定して描画
 `spawn_primitive_from_mesh()`は`MeshAssetId`を指定し、すでに生成されたMeshを使って基本図形を複製することができます。
 ```rust

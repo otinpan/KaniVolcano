@@ -229,11 +229,10 @@ impl ObjectApi for SceneContext<'_> {
         };
 
         Ok(Material {
-            color,
-            alpha,
-            use_texture,
-            texture,
+            base_color: color.extend(alpha),
+            base_color_texture: use_texture.then_some(texture),
             pipeline_key,
+            ..Material::default()
         })
     }
 
@@ -268,6 +267,55 @@ impl AudioApi for SceneContext<'_>{
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn set_material_updates_renderers_and_pending_primitives() {
+        use crate::MeshRenderer;
+        use renderer_vulkan::{MeshHandle, VertexLayout};
+
+        let mut world = World::default();
+        let input = Input::default();
+        let time = Time::default();
+        let mut resources = Resources::default();
+        let mut scheduler = Scheduler::default();
+        let mut context = SceneContext::new(
+            SceneId(1), &mut world, &input, &time, &mut resources, &mut scheduler,
+        );
+        let material = Material {
+            pipeline_key: PipelineKey::Pbr3D,
+            metallic: 0.8,
+            roughness: 0.3,
+            ..Material::default()
+        };
+
+        let entity = context.spawn();
+        let mesh = MeshHandle::new(0, VertexLayout::Lit3D);
+        context.add_component(entity, MeshRenderer::new(mesh, Material::default()).unwrap());
+        context.set_material(entity, material).unwrap();
+        let renderer = context.get_component::<MeshRenderer>(entity).unwrap();
+        assert_eq!(renderer.material, material);
+        assert_eq!(renderer.mesh, mesh);
+
+        let incompatible = Material { pipeline_key: PipelineKey::Mesh3D, ..material };
+        assert!(context.set_material(entity, incompatible).is_err());
+        assert_eq!(context.get_component::<MeshRenderer>(entity).unwrap().material, material);
+
+        let pending = context.spawn_shape_with_material(
+            PrimitiveShape::Sphere {
+                radius: 1.0, rings: 8, segments: 16,
+                color: cgmath::vec3(1.0, 1.0, 1.0),
+            },
+            Transform::default(), incompatible, true,
+        ).unwrap();
+        context.set_material(pending, material).unwrap();
+        assert_eq!(context.get_component::<PendingPrimitiveMesh>(pending).unwrap().material, material);
+        assert!(!context.has_component::<MeshRenderer>(pending));
+
+        let empty = context.spawn();
+        assert!(context.set_material(empty, material).is_err());
+        context.despawn(empty);
+        assert!(context.set_material(empty, material).is_err());
+    }
 
     pub struct MockScene {
         global_entity: Option<EntityId>,

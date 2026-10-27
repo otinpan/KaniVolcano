@@ -28,10 +28,12 @@ pub struct VulkanData {
     pub pipelines: Vec<GraphicsPipeline>,
     // Descriptors
     pub global_descriptor_set_layout: vk::DescriptorSetLayout,
+    pub pbr_global_descriptor_set_layout: vk::DescriptorSetLayout,
     pub material_descriptor_set_layout: vk::DescriptorSetLayout,
     pub light_descriptor_set_layout: vk::DescriptorSetLayout,
     pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
     pub global_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub pbr_global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub material_descriptor_sets: Vec<vk::DescriptorSet>,
     pub light_descriptor_sets: Vec<vk::DescriptorSet>,
     pub skybox_descriptor_sets: Vec<vk::DescriptorSet>,
@@ -52,6 +54,9 @@ pub struct VulkanData {
     // Buffers
     pub uniform_buffers: Vec<vk::Buffer>,
     pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    // One 16-byte camera world-position UBO per swapchain image.
+    pub pbr_camera_uniform_buffers: Vec<vk::Buffer>,
+    pub pbr_camera_uniform_buffers_memory: Vec<vk::DeviceMemory>,
     pub light_uniform_buffers: Vec<vk::Buffer>,
     pub light_uniform_buffers_memory: Vec<vk::DeviceMemory>,
     // Command Buffers
@@ -124,6 +129,7 @@ pub enum PipelineKey {
     DebugLine3D,
     Transparent3D,
     Lit3D,
+    Pbr3D,
     Ui2D,
     Skybox,
     TextUi2D,
@@ -137,6 +143,7 @@ impl PipelineKey {
             PipelineKey::Transparent3D => VertexLayout::Mesh3D,
             PipelineKey::DebugLine3D => VertexLayout::DebugLine3D,
             PipelineKey::Lit3D => VertexLayout::Lit3D,
+            PipelineKey::Pbr3D => VertexLayout::Lit3D,
             PipelineKey::Ui2D => VertexLayout::Ui2D,
             PipelineKey::Skybox => VertexLayout::Skybox,
             PipelineKey::TextUi2D => VertexLayout::Ui2D,
@@ -164,16 +171,38 @@ impl VulkanData {
     }
 }
 
+/// CPU-side material data passed from the engine to the renderer.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct RenderMaterial {
+    pub base_color: cgmath::Vector4<f32>,
+    pub base_color_texture: Option<TextureHandle>,
+    pub metallic: f32,
+    pub roughness: f32,
+    pub metallic_roughness_texture: Option<TextureHandle>,
+    pub normal_texture: Option<TextureHandle>,
+    pub normal_scale: f32,
+    pub emissive_color: cgmath::Vector3<f32>,
+    pub emissive_strength: f32,
+    pub emissive_texture: Option<TextureHandle>,
+    pub occlusion_strength: f32,
+    pub alpha_mode: RenderAlphaMode,
+    pub alpha_cutoff: f32,
+    pub double_sided: bool,
+    pub pipeline_key: PipelineKey,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RenderAlphaMode {
+    Opaque,
+    Mask,
+    Blend,
+}
+
 #[derive(Clone, Debug)]
 pub struct RenderItem {
     pub mesh_index: MeshHandle,
     pub transform: Transform,
-    pub alpha: f32,
-    // material
-    pub material_color: cgmath::Vector3<f32>,
-    pub use_texture: bool,
-    pub texture_index: TextureHandle, // use Texture from VulkanData::textures
-    pub pipeline_key: PipelineKey,
+    pub material: RenderMaterial,
     pub is_visible: bool,
     pub draw_order: i32,
 }

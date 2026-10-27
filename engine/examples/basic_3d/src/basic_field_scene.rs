@@ -202,11 +202,10 @@ impl Command for SpawnTransparentVikingRoom{
                 scale: vec3(1.0,1.0,1.0)
             },
             Material { 
-                color: vec3(1.0,1.0,1.0), 
-                alpha: 0.5, 
-                use_texture: true, 
-                texture: jupiter,
-                pipeline_key: PipelineKey::Lit3D
+                base_color: vec3(1.0,1.0,1.0).extend(0.5),
+                base_color_texture: Some(jupiter),
+                pipeline_key: PipelineKey::Lit3D,
+                ..Material::default()
             }
         )?;
         Ok(())

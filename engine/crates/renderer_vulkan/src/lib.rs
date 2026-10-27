@@ -51,13 +51,13 @@ pub use self::model::{SourceMesh, SourceTopology};
 use self::pipeline::{
     create_debug_line_pipeline, create_lit3d_pipeline, create_mesh3d_pipeline, create_render_pass,
     create_skybox_pipeline, create_transparent3d_pipeline, create_ui2d_pipeline, create_text_ui2d_pipeline,
-    create_text_3d_pipeline,
+    create_text_3d_pipeline, create_pbr3d_pipeline,
 };
 use self::swapchain::{create_framebuffers, create_swapchain, create_swapchain_image_views};
 use self::sync::{create_render_finished_semaphores, create_sync_objects};
 use self::types::{Mesh, RenderSkybox, VulkanData};
 pub use self::types::{
-    MeshHandle, PipelineKey, RenderCamera, RenderItem, SkyboxTextureHandle, TextureHandle,
+    MeshHandle, PipelineKey, RenderCamera, RenderItem, RenderMaterial, RenderAlphaMode, SkyboxTextureHandle, TextureHandle,
     TextRenderItem,
 };
 use self::uniform::{
@@ -65,7 +65,9 @@ use self::uniform::{
     create_light_descriptor_set_layout, create_light_descriptor_sets, create_light_uniform_buffers,
     create_material_descriptor_set_layout, create_material_descriptor_sets,
     create_skybox_descriptor_set_layout, create_skybox_descriptor_sets, create_uniform_buffers,
+    create_pbr_descriptor_set_layout, create_pbr_global_descriptor_sets,
     update_light_uniform_buffer, update_uniform_buffer,
+    create_pbr_camera_uniform_buffers, update_pbr_camera_uniform_buffer,
 };
 pub use self::vertex::{DebugLineVertex, Lit3DVertex, Mesh3DVertex, SourceVertex, VertexLayout};
 use self::text::{GpuGlyphAtlas};
@@ -142,6 +144,7 @@ impl VulkanRenderer {
         create_swapchain_image_views(&device, &mut data)?;
         create_render_pass(&instance, &device, &mut data)?;
         create_global_descriptor_set_layout(&device, &mut data)?;
+        create_pbr_descriptor_set_layout(&device, &mut data)?;
         create_material_descriptor_set_layout(&device, &mut data)?;
         create_light_descriptor_set_layout(&device, &mut data)?;
         create_skybox_descriptor_set_layout(&device, &mut data)?;
@@ -156,9 +159,11 @@ impl VulkanRenderer {
         let black_skybox_texture = create_black_skybox_texture(&instance, &device, &mut data)?;
         data.skybox_textures.push(black_skybox_texture);
         create_uniform_buffers(&instance, &device, &mut data)?;
+        create_pbr_camera_uniform_buffers(&instance, &device, &mut data)?;
         create_light_uniform_buffers(&instance, &device, &mut data)?;
         create_descriptor_pool(&device, &mut data)?;
         create_global_descriptor_sets(&device, &mut data)?;
+        create_pbr_global_descriptor_sets(&device, &mut data)?;
         create_material_descriptor_sets(&device, &mut data)?;
         create_light_descriptor_sets(&device, &mut data)?;
         create_skybox_descriptor_sets(&device, &mut data)?;
@@ -216,6 +221,7 @@ impl VulkanRenderer {
         // uniform buffer <-> descriptor set <-> pipeline layout <-> pipeline <-> shader
         update_command_buffer(self, image_index)?;
         update_uniform_buffer(self, image_index)?;
+        update_pbr_camera_uniform_buffer(self, image_index)?;
         update_light_uniform_buffer(self, image_index)?;
 
         // 6. wait image_available_semaphores
@@ -314,6 +320,7 @@ impl VulkanRenderer {
             self.data.skybox_descriptor_sets.clear();
             create_descriptor_pool(&self.device, &mut self.data)?;
             create_global_descriptor_sets(&self.device, &mut self.data)?;
+            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
             create_material_descriptor_sets(&self.device, &mut self.data)?;
             create_light_descriptor_sets(&self.device, &mut self.data)?;
             create_skybox_descriptor_sets(&self.device, &mut self.data)?;
@@ -347,6 +354,7 @@ impl VulkanRenderer {
 
             create_descriptor_pool(&self.device, &mut self.data)?;
             create_global_descriptor_sets(&self.device, &mut self.data)?;
+            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
             create_material_descriptor_sets(&self.device, &mut self.data)?;
             create_light_descriptor_sets(&self.device, &mut self.data)?;
             create_skybox_descriptor_sets(&self.device, &mut self.data)?;
@@ -384,6 +392,7 @@ impl VulkanRenderer {
             self.data.skybox_descriptor_sets.clear();
             create_descriptor_pool(&self.device, &mut self.data)?;
             create_global_descriptor_sets(&self.device, &mut self.data)?;
+            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
             create_material_descriptor_sets(&self.device, &mut self.data)?;
             create_light_descriptor_sets(&self.device, &mut self.data)?;
             create_skybox_descriptor_sets(&self.device, &mut self.data)?;
@@ -604,6 +613,7 @@ impl VulkanRenderer {
                 swapchain_extent: self.data.swapchain_extent,
                 swapchain_image_views: self.data.swapchain_image_views.clone(),
                 global_descriptor_set_layout: self.data.global_descriptor_set_layout,
+                pbr_global_descriptor_set_layout: self.data.pbr_global_descriptor_set_layout,
                 material_descriptor_set_layout: self.data.material_descriptor_set_layout,
                 light_descriptor_set_layout: self.data.light_descriptor_set_layout,
                 skybox_descriptor_set_layout: self.data.skybox_descriptor_set_layout,
@@ -756,9 +766,11 @@ impl VulkanRenderer {
         create_depth_objects(&self.instance, &self.device, &mut self.data)?;
         create_framebuffers(&self.device, &mut self.data)?;
         create_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
+        create_pbr_camera_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_light_uniform_buffers(&self.instance, &self.device, &mut self.data)?;
         create_descriptor_pool(&self.device, &mut self.data)?;
         create_global_descriptor_sets(&self.device, &mut self.data)?;
+        create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
         create_material_descriptor_sets(&self.device, &mut self.data)?;
         create_light_descriptor_sets(&self.device, &mut self.data)?;
         create_skybox_descriptor_sets(&self.device, &mut self.data)?;
@@ -799,6 +811,8 @@ impl VulkanRenderer {
             .destroy_descriptor_set_layout(self.data.light_descriptor_set_layout, None);
         self.device
             .destroy_descriptor_set_layout(self.data.global_descriptor_set_layout, None);
+        self.device
+            .destroy_descriptor_set_layout(self.data.pbr_global_descriptor_set_layout, None);
         self.device
             .destroy_descriptor_set_layout(self.data.skybox_descriptor_set_layout, None);
 
@@ -846,6 +860,11 @@ impl VulkanRenderer {
             .drain(..)
             .for_each(|m| self.device.free_memory(m, None));
         self.data.global_descriptor_sets.clear();
+        self.data.pbr_global_descriptor_sets.clear();
+        self.data.pbr_camera_uniform_buffers.drain(..)
+            .for_each(|buffer| self.device.destroy_buffer(buffer, None));
+        self.data.pbr_camera_uniform_buffers_memory.drain(..)
+            .for_each(|memory| self.device.free_memory(memory, None));
         self.data.material_descriptor_sets.clear();
         self.data.light_descriptor_sets.clear();
         self.data.skybox_descriptor_sets.clear();
@@ -895,6 +914,7 @@ unsafe fn create_pipelines(device: &Device, data: &mut VulkanData) -> Result<()>
     create_text_ui2d_pipeline(device, data)?;
     create_text_3d_pipeline(device,data)?;
     create_skybox_pipeline(device, data)?;
+    create_pbr3d_pipeline(device, data)?;
 
     Ok(())
 }

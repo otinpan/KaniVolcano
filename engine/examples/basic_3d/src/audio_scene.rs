@@ -264,7 +264,6 @@ impl AudioScene {
         };
         let height = 7.0;
         let width = 2.0;
-        let texture = context.default_texture();
         let items = [
             // position, color, audio, emitter
             (vec2(-8.0, -8.0), vec3(1.0, 1.0, 0.0), neko, emitter0),
@@ -274,11 +273,10 @@ impl AudioScene {
             let bill = context.spawn_primitive_from_mesh(
                 mesh_id,
                 Material {
-                    color: item.1,
-                    alpha: 1.0,
-                    use_texture: false,
-                    texture: texture,
+                    base_color: item.1.extend(1.0),
+                    base_color_texture: None,
                     pipeline_key: PipelineKey::Lit3D,
+                    ..Material::default()
                 },
                 Transform {
                     position: vec3(item.0.x, item.0.y, self.ground + height / 2.0 ),
@@ -320,7 +318,6 @@ impl AudioScene {
         context: &mut UpdateContext<'_>,
         mesh_id: MeshAssetId,
     ) -> Result<()> {
-        let texture = context.default_texture();
         let items = [
             // position, size, color, alpha, Pipeline, name
             (
@@ -354,11 +351,10 @@ impl AudioScene {
             let obj = context.spawn_primitive_from_mesh(
                 mesh_id,
                 Material {
-                    color: item.2,
-                    alpha: item.3,
-                    use_texture: false,
-                    texture: texture,
+                    base_color: item.2.extend(item.3),
+                    base_color_texture: None,
                     pipeline_key: item.4,
+                    ..Material::default()
                 },
                 Transform {
                     position: vec3(item.0.x, item.0.y, self.ground + size / 2.0+0.3),

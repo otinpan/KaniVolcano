@@ -141,11 +141,11 @@ impl ThreadProfilerSystem {
             scale: vec3(1.0, size.x, size.y),
             ..Transform::default()
         };
-        context
+        let material = &mut context
             .get_component_mut::<MeshRenderer>(id)
             .unwrap()
-            .material
-            .color = color;
+            .material;
+        material.base_color = color.extend(material.base_color.w);
         context
             .get_component_mut::<Visibility>(id)
             .unwrap()

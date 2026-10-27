@@ -72,11 +72,10 @@ impl Command for SpawnVikingRoomCommand {
                     ..Default::default()
                 },
                 Material {
-                    color: vec3(1.0, 1.0, 1.0),
-                    alpha: variant.2,
-                    use_texture: true,
-                    texture: viking_texture,
+                    base_color: vec3(1.0, 1.0, 1.0).extend(variant.2),
+                    base_color_texture: Some(viking_texture),
                     pipeline_key: variant.1,
+                    ..Material::default()
                 },
             )?;
             context.add_component(

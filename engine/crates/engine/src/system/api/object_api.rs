@@ -16,6 +16,32 @@ pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec2 = cgmath::Vector2<f32>;
 
 pub trait ObjectApi: EntityApi + AssetApi {
+    /// Replaces the material without rebuilding an existing mesh or its vertex colors.
+    /// Pending primitives use the new material's vertex layout when generated.
+    /// An incompatible existing mesh returns an error without changing its material.
+    fn set_material(&mut self, entity: EntityId, material: Material) -> Result<()> {
+        anyhow::ensure!(self.is_entity_registered(entity), "entity not found: {entity:?}");
+
+        if let Some(renderer) = self.get_component::<MeshRenderer>(entity) {
+            anyhow::ensure!(
+                renderer.mesh.vertex_layout == material.pipeline_key.required_vertex_layout(),
+                "Material pipeline {:?} does not match mesh vertex layout {:?}.",
+                material.pipeline_key,
+                renderer.mesh.vertex_layout
+            );
+        } else if !self.has_component::<crate::PendingPrimitiveMesh>(entity) {
+            bail!("entity {entity:?} has no MeshRenderer or PendingPrimitiveMesh");
+        }
+
+        if let Some(renderer) = self.get_component_mut::<MeshRenderer>(entity) {
+            renderer.material = material;
+        }
+        if let Some(pending) = self.get_component_mut::<crate::PendingPrimitiveMesh>(entity) {
+            pending.material = material;
+        }
+        Ok(())
+    }
+
     fn spawn_model(
         &mut self,
         model_name: &str,
@@ -186,7 +212,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
         let center = (p0 + p1 + p2) / 3.0;
         let shape = PrimitiveShape::Triangle {
             points: [p0 - center, p1 - center, p2 - center],
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: center,
@@ -237,7 +263,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
                 vec3(0.0, half_width, -half_height),
                 vec3(0.0, half_width, half_height),
             ],
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: pos,
@@ -293,7 +319,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
                 vec3(-h, h, -h),
                 vec3(-h, -h, -h),
             ],
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: pos,
@@ -334,7 +360,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
                 vec3(-w, h, -d),
                 vec3(-w, -h, -d),
             ],
-            color: material.color,
+        color: material.base_color.truncate(),
         };
 
         let transform = Transform {
@@ -360,7 +386,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
         let shape = PrimitiveShape::Circle {
             radius,
             segments,
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: pos,
@@ -407,7 +433,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
         let local_points = points.iter().map(|p| *p - center).collect::<Vec<_>>();
         let shape = PrimitiveShape::Polygon {
             points: local_points,
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: center,
@@ -444,7 +470,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
             radius,
             rings,
             segments,
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: center,
@@ -466,7 +492,7 @@ pub trait ObjectApi: EntityApi + AssetApi {
         let shape = PrimitiveShape::Line {
             pos0: pos0 - center,
             pos1: pos1 - center,
-            color: material.color,
+        color: material.base_color.truncate(),
         };
         let transform = Transform {
             position: center,

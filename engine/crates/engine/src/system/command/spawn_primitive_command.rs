@@ -40,9 +40,8 @@ impl Command for SpawnPrimitiveCommand {
         context.spawn_primitive_from_mesh(
             asset_id,
             Material {
-                color: vec3(1.0, 1.0, 1.0),
-                use_texture: self.texture_name.is_some(),
-                texture,
+                base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+                base_color_texture: self.texture_name.is_some().then_some(texture),
                 pipeline_key: self.pipeline_key,
                 ..Default::default()
             },
