@@ -153,3 +153,9 @@ pub enum AlphaMode {
 }
 ```
 ![](../assets/material.png)
+
+## v0.6.1
+Fixed text render system
+* Reuse dedicated host-visible buffers for dynamic text updates, eliminating per-mesh GPU idle waits.
+* Recycle text buffers only after all frames using them have completed, with bounded spare-buffer caching.
+* Reuse freed mesh slots to prevent unbounded growth during repeated text updates.
