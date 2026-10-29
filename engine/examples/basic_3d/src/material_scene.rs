@@ -77,7 +77,7 @@ impl MaterialScene {
                 metallic: 1.0,
                 roughness,
                 ..base
-            }, &format!("R={roughness:.2}  M=1"))?;
+            }, &format!("M=1  R={roughness:.2} "))?;
         }
 
         // Keep color and roughness fixed while varying metalness.

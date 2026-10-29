@@ -208,6 +208,16 @@ Main Thread
 	- プロファイリング
 	- Entity数
 	- GPUリソース表示
+* Material
+	- 実装済み
+		- metallics
+		- roghness
+		- emissive
+	- 未実装
+		- texture
+		- occlusion (遮蔽による効果)
+		- alpha
+		- double_sided
 * アニメーション
 	- `.gltf`: JSON形式、ファイル数は複数
 	- `.glb`: バイナリ、ファイル数1つ

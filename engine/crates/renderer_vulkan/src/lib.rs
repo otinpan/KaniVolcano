@@ -22,6 +22,9 @@ mod types;
 mod uniform;
 mod vertex;
 mod text;
+mod text_buffers;
+#[cfg(all(test, target_os = "windows"))]
+mod text_gpu_tests;
 
 use anyhow::{Result, anyhow};
 use cgmath::Matrix4;
@@ -98,6 +101,8 @@ pub struct VulkanRenderer {
     text_system: TextSystem,
     glyph_atlas: GlyphAtlas,
     gpu_glyph_atlas: GpuGlyphAtlas,
+    text_buffers: text_buffers::TextBuffers,
+    text_trace: bool,
 
     fonts: Vec<LoadedFont>,
 }
@@ -179,6 +184,8 @@ impl VulkanRenderer {
             text_system,
             glyph_atlas,
             gpu_glyph_atlas,
+            text_buffers: text_buffers::TextBuffers::default(),
+            text_trace: std::env::var_os("KANI_TEXT_TRACE").is_some(),
             fonts: Vec::new(),
         })
     }
@@ -188,6 +195,8 @@ impl VulkanRenderer {
         let in_flight_fence = self.data.in_flight_fences[self.frame];
         self.device
             .wait_for_fences(&[in_flight_fence], true, u64::MAX)?;
+        self.text_buffers.completed(self.frame);
+        self.text_buffers.trim(&self.device, &mut self.data);
 
         // 2. When get swapchain image, then signal image_available_semaphore
         let result = self.device.acquire_next_image_khr(
@@ -246,6 +255,16 @@ impl VulkanRenderer {
         // 10. submit to graphics queue
         self.device
             .queue_submit(self.data.graphics_queue, &[submit_info], in_flight_fence)?;
+        // Mark only successful submissions. Updates without a render never pin buffers.
+        for item in &self.data.text_render_objects {
+            self.text_buffers.submitted(item.mesh.index, self.frame);
+        }
+        for item in &self.data.render_objects {
+            self.text_buffers.submitted(item.mesh_index.index, self.frame);
+        }
+        if let Some(skybox) = &self.data.skybox {
+            self.text_buffers.submitted(skybox.mesh.index, self.frame);
+        }
 
         let swapchains = &[self.data.swapchain];
         let image_indices = &[image_index as u32];
@@ -518,6 +537,13 @@ impl VulkanRenderer {
 
     pub unsafe fn destroy_mesh(&mut self, mesh_handle: MeshHandle) -> Result<()> {
         let mesh_index = mesh_handle.index;
+        if self.text_buffers.owns(mesh_index) {
+            anyhow::ensure!(mesh_handle.vertex_layout == VertexLayout::Ui2D,
+                "text mesh must use Ui2D vertices");
+            self.text_buffers.retire(mesh_index);
+            self.text_buffers.trim(&self.device, &mut self.data);
+            return Ok(());
+        }
         let slot = self
             .data
             .meshes
@@ -666,14 +692,28 @@ impl VulkanRenderer {
         font_size: f32,
         line_height: f32,
     ) -> Result<GpuTextMesh> {
+        let start = self.text_trace.then(std::time::Instant::now);
         let font = self.fonts.get(font.0)
             .ok_or_else(|| anyhow!("font handle not found"))?;
         let buffer = self.text_system.layout_text(font, content, font_size, line_height)?;
+        let layout_done = start.map(|_| std::time::Instant::now());
         let mesh = kani_volcano_text::build_text_mesh(
             &mut self.text_system, &mut self.glyph_atlas, &buffer,
         )?;
+        let glyph_done = start.map(|_| std::time::Instant::now());
         self.upload_text_atlas()?;
-        self.upload_text_mesh(&mesh)
+        let atlas_done = start.map(|_| std::time::Instant::now());
+        let result = self.upload_text_mesh(&mesh);
+        if let Some(start) = start {
+            let layout = layout_done.unwrap();
+            let glyph = glyph_done.unwrap();
+            let atlas = atlas_done.unwrap();
+            eprintln!("[kani_text] layout={:.3}ms glyph_mesh={:.3}ms atlas={:.3}ms mesh_write={:.3}ms batches={}",
+                (layout-start).as_secs_f64()*1000.0, (glyph-layout).as_secs_f64()*1000.0,
+                (atlas-glyph).as_secs_f64()*1000.0, atlas.elapsed().as_secs_f64()*1000.0,
+                mesh.batches.len());
+        }
+        result
     }
 
     // send atlas map to gpu
@@ -706,7 +746,7 @@ impl VulkanRenderer {
                 continue;
             }
 
-            let vertices = batch.vertices.iter()
+            let vertices: Vec<Ui2DVertex> = batch.vertices.iter()
                 .map(|vertex| {
                     Ui2DVertex::new(
                         vec2(
@@ -719,14 +759,9 @@ impl VulkanRenderer {
                 })
                 .collect();
 
-            let mesh_data = MeshData {
-                vertices,
-                indices: batch.indices.clone(),
-            };
-
-            let handle = match self.load_mesh_from_data(
-                mesh_data,
-                VertexLayout::Ui2D,
+            let handle = match self.text_buffers.upload(
+                &self.instance, &self.device, &mut self.data,
+                &vertices, &batch.indices,
             ) {
                 Ok(handle) => handle,
                 Err(error) => {
@@ -747,9 +782,13 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn destroy_text_mesh(&mut self, text_mesh: &mut GpuTextMesh) -> Result<()>{
+        let start = self.text_trace.then(std::time::Instant::now);
         while let Some(batch) = text_mesh.batches.last(){
             self.destroy_mesh(batch.mesh)?;
             text_mesh.batches.pop();
+        }
+        if let Some(start) = start {
+            eprintln!("[kani_text] retire={:.3}ms", start.elapsed().as_secs_f64()*1000.0);
         }
 
         Ok(())
