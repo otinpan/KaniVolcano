@@ -1,5 +1,5 @@
 [package]
-name = "kani_volcano_animation"
+name = "kani-volcano-animation"
 version.workspace = true
 edition.workspace = true
 

@@ -8,11 +8,14 @@ use renderer_vulkan::{
 use kani_volcano_audio::{
     AudioHandle, AudioBusHandle, AudioEmitterHandle, PlaybackHandle,
 };
+use kani_volcano_animation::{
+    GltfModel
+};
 use std::collections::{HashMap, HashSet};
 
 pub type Vec3 = Vector3<f32>;
 
-// handle the number of entities that use this Mesh
+// References held by entities and model assets using this mesh.
 #[derive(Debug)]
 pub struct MeshAsset {
     pub handle: MeshHandle,
@@ -61,6 +64,17 @@ pub enum AudioPlaybackResource{
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AudioPlaybackId(pub usize);
 
+#[derive(Debug)]
+pub struct GltfModelAsset{
+    pub source: GltfModel,
+    pub meshes: Vec<Vec<MeshAssetId>>,
+    pub ref_count: usize,
+    pub auto_release: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GltfModelAssetId(pub usize);
+
 
 pub struct Resources {
     mesh_assets: Vec<Option<MeshAsset>>,
@@ -81,6 +95,9 @@ pub struct Resources {
     audio_buses: HashMap<String, AudioBusId>,
     audio_playback_resources: HashMap<AudioPlaybackId, AudioPlaybackResource>,
     next_audio_playback_id: usize,
+    // gltf model
+    gltf_model_assets: Vec<Option<GltfModelAsset>>,
+    gltf_models: HashMap<String, GltfModelAssetId>,
 }
 
 impl Resources {
@@ -201,6 +218,56 @@ impl Resources {
         id
     }
 
+    pub fn insert_gltf_model_asset(
+        &mut self,
+        gltf_model: GltfModel,
+        meshes: Vec<Vec<MeshAssetId>>,
+        auto_release: bool,
+    ) -> Result<GltfModelAssetId>{
+        // One ownership reference per distinct mesh, even when several
+        // primitives refer to the same asset. Validate before changing counts.
+        let owned: HashSet<_> = meshes.iter().flatten().copied().collect();
+        for mesh in &owned {
+            let asset = self.mesh_assets.get(mesh.0).and_then(Option::as_ref)
+                .ok_or_else(|| anyhow::anyhow!("mesh asset not found: {mesh:?}"))?;
+            anyhow::ensure!(asset.ref_count < usize::MAX, "mesh reference count exhausted: {mesh:?}");
+        }
+        for mesh in owned {
+            // increment mesh referejnce count
+            self.retain_mesh(mesh);
+        }
+        let id: GltfModelAssetId=GltfModelAssetId(self.gltf_model_assets.len());
+
+        self.gltf_model_assets.push(Some(GltfModelAsset{
+            source: gltf_model,
+            meshes,
+            ref_count: 0,
+            auto_release,
+        }));
+
+        Ok(id)
+    }
+
+    /// Remove the model's ownership references. The caller must destroy every
+    /// returned GPU handle; meshes still retained by entities/models stay alive.
+    #[must_use = "returned mesh handles must be destroyed by the renderer"]
+    pub fn remove_gltf_model_asset(&mut self, id: GltfModelAssetId) -> Vec<MeshHandle> {
+        let Some(model) = self.gltf_model_assets.get_mut(id.0).and_then(Option::take) else {
+            return Vec::new();
+        };
+        self.gltf_models.retain(|_, value| *value != id);
+        let mut released = Vec::new();
+        let mut seen = HashSet::new();
+        for mesh in model.meshes.into_iter().flatten() {
+            if seen.insert(mesh) {
+                if let Some(handle) = self.release_mesh(mesh) {
+                    released.push(handle);
+                }
+            }
+        }
+        released
+    }
+
     pub fn register_model(
         &mut self,
         name: impl Into<String>,
@@ -211,6 +278,29 @@ impl Resources {
 
         self.models.insert(name.into(), id);
         id
+    }
+
+    pub fn register_gltf_model(
+        &mut self,
+        name: impl Into<String>,
+        gltf_model: GltfModel,
+        mesh_handles: Vec<Vec<MeshHandle>>,
+        auto_release: bool,
+    ) -> Result<GltfModelAssetId>{
+        let name = name.into();
+        // Overwriting the name would strand the old model's ownership refs.
+        // On rejection, the caller still owns the supplied GPU handles.
+        anyhow::ensure!(!self.gltf_models.contains_key(&name), "model already registered: {name}");
+        let mesh_assets = mesh_handles.into_iter().map(|handles| {
+            handles.into_iter().map(|handle| self.insert_mesh_asset(handle, auto_release)).collect()
+        }).collect();
+        let id=self.insert_gltf_model_asset(
+            gltf_model,
+            mesh_assets,
+            auto_release
+        )?;
+        self.gltf_models.insert(name, id);
+        Ok(id)
     }
 
     pub fn register_texture(&mut self, name: &str, handle: TextureHandle) -> TextureHandle {
@@ -453,6 +543,8 @@ impl Default for Resources {
             audio_buses: HashMap::new(),
             audio_playback_resources: HashMap::new(),
             next_audio_playback_id: 0,
+            gltf_model_assets: Vec::new(),
+            gltf_models: HashMap::new(),
         }
     }
 }
@@ -607,6 +699,62 @@ mod tests {
 
     fn mesh_asset(resources: &Resources, id: MeshAssetId) -> &MeshAsset {
         resources.mesh_assets[id.0].as_ref().unwrap()
+    }
+
+    fn empty_gltf_model() -> GltfModel {
+        GltfModel { }
+    }
+
+    #[test]
+    fn model_keeps_mesh_alive_after_last_entity_and_allows_respawn() {
+        let mut resources = Resources::default();
+        let model = resources.register_gltf_model("character", empty_gltf_model(),
+            vec![vec![mesh_handle(3)]], true).unwrap();
+        let mesh = resources.gltf_model_assets[model.0].as_ref().unwrap().meshes[0][0];
+        assert_eq!(mesh_asset(&resources, mesh).ref_count, 1);
+        resources.retain_mesh(mesh);
+        assert_eq!(resources.release_mesh(mesh), None);
+        assert_eq!(resources.retain_mesh(mesh), Some(mesh_handle(3)));
+        assert_eq!(resources.release_mesh(mesh), None);
+        assert_eq!(resources.remove_gltf_model_asset(model), vec![mesh_handle(3)]);
+        assert!(resources.get_mesh_handle(mesh).is_none());
+        assert!(!resources.gltf_models.contains_key("character"));
+        assert!(resources.remove_gltf_model_asset(model).is_empty());
+    }
+
+    #[test]
+    fn model_removal_preserves_entity_and_other_model_references() {
+        let mut resources = Resources::default();
+        let mesh = resources.insert_mesh_asset(mesh_handle(4), true);
+        let first = resources.insert_gltf_model_asset(empty_gltf_model(),
+            vec![vec![mesh]],true).unwrap();
+        let second = resources.insert_gltf_model_asset(empty_gltf_model(), vec![vec![mesh]], true).unwrap();
+        assert_eq!(mesh_asset(&resources, mesh).ref_count, 2);
+        resources.retain_mesh(mesh);
+        assert!(resources.remove_gltf_model_asset(first).is_empty());
+        assert!(resources.remove_gltf_model_asset(second).is_empty());
+        assert_eq!(mesh_asset(&resources, mesh).ref_count, 1);
+        assert_eq!(resources.release_mesh(mesh), Some(mesh_handle(4)));
+    }
+
+    #[test]
+    fn invalid_model_mesh_does_not_partially_retain_assets() {
+        let mut resources = Resources::default();
+        let mesh = resources.insert_mesh_asset(mesh_handle(5), true);
+        assert!(resources.insert_gltf_model_asset(empty_gltf_model(),
+            vec![vec![mesh, MeshAssetId(999)]], true).is_err());
+        assert_eq!(mesh_asset(&resources, mesh).ref_count, 0);
+        assert!(resources.gltf_model_assets.is_empty());
+    }
+
+    #[test]
+    fn removing_model_respects_non_auto_release_meshes() {
+        let mut resources = Resources::default();
+        let mesh = resources.insert_mesh_asset(mesh_handle(6), false);
+        let model = resources.insert_gltf_model_asset(empty_gltf_model(), vec![vec![mesh]],false).unwrap();
+        assert!(resources.remove_gltf_model_asset(model).is_empty());
+        assert_eq!(mesh_asset(&resources, mesh).ref_count, 0);
+        assert_eq!(resources.get_mesh_handle(mesh), Some(mesh_handle(6)));
     }
 
     #[test]

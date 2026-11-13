@@ -21,6 +21,7 @@ use crate::primitive::{
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
     UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
+    GltfModelAssetId, 
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -344,6 +345,18 @@ impl App {
         };
 
         Ok(self.resources.register_model(name, handle, auto_release))
+    }
+
+    pub unsafe fn load_gltf_model(
+        &mut self,
+        name: &str,
+        path: &str,
+        auto_release: bool,
+    ) -> Result<GltfModelAssetId> {
+        //let gltf_model: GltfModel = kani_volcano_animation::load_gltf_model(path)?;
+        //let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_mesh_from_gltf_model(gltf_model)?;
+        //Ok(self.resources.register_gltf_model(name, gltf_model, mesh_handles))
+        Ok(GltfModelAssetId(0))
     }
 
     pub unsafe fn load_texture(&mut self, name: &str, path: &str) -> Result<TextureHandle> {

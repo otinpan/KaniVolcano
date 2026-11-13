@@ -13,5 +13,6 @@ log.workspace = true
 kani_volcano_text = { package = "kani-volcano-text", path = "../kani_volcano_text" }
 kani_volcano_math = { package = "kani-volcano-math", path = "../kani_volcano_math" }
 kani_volcano_audio = { package = "kani-volcano-audio", path = "../kani_volcano_audio" }
+kani_volcano_animation = { package = "kani-volcano-animation", path = "../kani_volcano_animation"}
 renderer_vulkan = { path = "../renderer_vulkan" }
 winit.workspace = true

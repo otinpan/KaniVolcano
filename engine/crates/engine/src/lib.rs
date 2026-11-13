@@ -32,7 +32,7 @@ pub use renderer_vulkan::{Msaa, PipelineKey, VertexLayout};
 pub use resources::{
     MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
     AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource,
-    AudioPlaybackId, AudioPlaybackResource,
+    AudioPlaybackId, AudioPlaybackResource, GltfModelAsset, GltfModelAssetId,
 };
 pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
@@ -63,7 +63,7 @@ pub mod prelude {
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
         AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle, DebugPauseCommand,
-        DrawOrder, AlphaMode,
+        DrawOrder, AlphaMode, GltfModelAssetId,
     };
 
     pub use kani_volcano_math::Transform;

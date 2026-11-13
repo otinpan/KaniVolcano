@@ -1078,6 +1078,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kani-volcano-animation"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "gltf",
+ "serde_json",
+]
+
+[[package]]
 name = "kani-volcano-audio"
 version = "0.6.0"
 dependencies = [
@@ -1091,6 +1100,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "cgmath",
+ "kani-volcano-animation",
  "kani-volcano-audio",
  "kani-volcano-math",
  "kani-volcano-text",
@@ -1114,15 +1124,6 @@ dependencies = [
  "anyhow",
  "cosmic-text",
  "etagere",
-]
-
-[[package]]
-name = "kani_volcano_animation"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "gltf",
- "serde_json",
 ]
 
 [[package]]

@@ -72,6 +72,15 @@ pub trait ObjectApi: EntityApi + AssetApi {
         Ok(entity)
     }
 
+    fn spawn_gltf_model(
+        &mut self,
+        model_name: &str,
+        transform: Transform,
+        material: Material
+    ) -> Result<EntityId>{
+        Ok(EntityId(0))
+    }
+
     fn spawn_text_ui2d(
         &mut self,
         font_name: &str,
