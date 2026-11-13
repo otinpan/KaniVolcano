@@ -354,7 +354,17 @@ impl App {
         auto_release: bool,
     ) -> Result<GltfModelAssetId> {
         //let gltf_model: GltfModel = kani_volcano_animation::load_gltf_model(path)?;
+
+        // send mesh to gpu
         //let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_mesh_from_gltf_model(gltf_model)?;
+
+        // load texture
+        //let texture_handle: TextureHandle=self.renderer.into_decoded_texture(gltf_model.images)
+
+        // register texture
+        // self.resources.register_texture(name, texture_handle)
+
+        // register model
         //Ok(self.resources.register_gltf_model(name, gltf_model, mesh_handles))
         Ok(GltfModelAssetId(0))
     }

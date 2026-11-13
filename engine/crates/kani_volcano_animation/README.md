@@ -24,6 +24,16 @@
 
 
 * `laod_gltf_model(path) -> GltfModel` でモデルのロード
+    - ModelImageから画像のロード
+        gltf::import
+        → ModelImage（画素形式を保持）
+        → engineでRGBA8へ変換
+        → DecodedTexture
+        → renderer.upload_decoded_texture(&decoded)
+    - 画像登録
+    - モデルのロード
+    - モデル登録
+
 * 参照カウンタの対応
     - `object_api`でspawnしたらgltf_modelの参照カウンタをインクリメントする
     - `entity_api`でdespawnしたらgltf_modelの参照カウンタをデクリメントする

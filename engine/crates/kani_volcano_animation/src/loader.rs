@@ -1,11 +1,11 @@
 use gltf::{
     Accessor, Animation, Camera, Buffer, Scene, Mesh, Node, Skin, Texture,
 };
+use std::fs::File;
 
-#[derive(Debug)]
-pub struct GltfModel{
-}
-
+/*
 pub fn load_gltf(path: &str) -> GltfModel{
+
     GltfModel{}
 }
+*/

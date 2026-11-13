@@ -9,7 +9,7 @@ use kani_volcano_audio::{
     AudioHandle, AudioBusHandle, AudioEmitterHandle, PlaybackHandle,
 };
 use kani_volcano_animation::{
-    GltfModel
+    GltfModel,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -702,7 +702,7 @@ mod tests {
     }
 
     fn empty_gltf_model() -> GltfModel {
-        GltfModel { }
+        GltfModel::default()
     }
 
     #[test]

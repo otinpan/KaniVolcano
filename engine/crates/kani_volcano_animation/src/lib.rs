@@ -1,6 +1,4 @@
 mod loader;
 mod types;
 
-pub use loader::{
-    GltfModel,
-};
+pub use types::{GltfModel};
