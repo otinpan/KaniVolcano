@@ -1,10 +1,3 @@
-use gltf::{
-    Accessor, Animation, Camera, Material, Mesh, Node, Scene, Skin, Texture,
-};
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ModelAssetId(pub usize);
-
 #[derive(Debug, Default)]
 pub struct GltfModel{
     pub scenes: Vec<ModelScene>,
@@ -45,6 +38,11 @@ pub struct ModelMesh{
 pub struct ModelPrimitive{
     pub positions: Vec<[f32; 3]>,
     pub normal: Option<Vec<[f32; 3]>>,
+    /// JOINTS_0: indices into ModelSkin.joints, not node indices.
+    pub joints: Option<Vec<[u16; 4]>>,
+    /// WEIGHTS_0: four influences per vertex; present together with joints.
+    pub weights: Option<Vec<[f32; 4]>>,
+    /// Currently stores TEXCOORD_0 only.
     pub tex_coord: Option<Vec<[f32; 2]>>,
     pub indices: Option<Vec<u32>>,
     pub material: Option<usize>,
@@ -85,20 +83,21 @@ pub struct ModelMaterial{
     pub normal_scale: f32,
 
     pub occlusion_texture: Option<TextureRef>,
-    pub occlusiton_strenght: f32,
+    pub occlusion_strength: f32,
 
     pub emissive: [f32; 3],
     pub emissive_texture: Option<TextureRef>,
 
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: f32,
-    pub double_slided: bool,
+    pub double_sided: bool,
 }
 
 
 #[derive(Debug, Default)]
 pub struct TextureRef{
-    pub texture: usize, // GltfModel.texture
+    pub texture: usize, // GltfModel.textures
+    /// Only set 0 is currently supported by ModelPrimitive.
     pub tex_coord: u32,
 }
 
@@ -148,15 +147,14 @@ pub enum Interpolation{
     CubicSpline,
 }
 
+/// Node TRS animation only. The loader must explicitly reject unsupported
+/// morph targets/weight animation rather than silently dropping them.
+/// CubicSpline stores [in_tangent, value, out_tangent] for each key time.
 #[derive(Debug)]
 pub enum AnimationValues{
     Translation(Vec<[f32;3]>),
     Rotation(Vec<[f32;4]>),
     Scale(Vec<[f32; 3]>),
-    MorphWeight{
-        target_count: usize,
-        valued: Vec<f32>,
-    }
 }
 
 #[derive(Debug, Default)]
@@ -191,12 +189,12 @@ impl Default for ModelMaterial {
             normal_texture: None,
             normal_scale: 1.0,
             occlusion_texture: None,
-            occlusiton_strenght: 1.0,
+            occlusion_strength: 1.0,
             emissive: [0.0; 3],
             emissive_texture: None,
             alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: 0.5,
-            double_slided: false,
+            double_sided: false,
         }
     }
 }

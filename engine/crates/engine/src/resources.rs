@@ -236,6 +236,8 @@ impl Resources {
             // increment mesh referejnce count
             self.retain_mesh(mesh);
         }
+
+        // insert gltf model
         let id: GltfModelAssetId=GltfModelAssetId(self.gltf_model_assets.len());
 
         self.gltf_model_assets.push(Some(GltfModelAsset{
