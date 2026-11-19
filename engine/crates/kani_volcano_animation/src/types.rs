@@ -27,7 +27,6 @@ pub struct ModelNode{
     pub transform: NodeTransform,
 }
 
-
 #[derive(Debug, Default)]
 pub struct ModelMesh{
     pub name: Option<String>,

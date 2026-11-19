@@ -7,6 +7,9 @@ use renderer_vulkan::{
 use kani_volcano_audio::{
     AudioSystem,
 };
+use kani_volcano_animation::{
+    load_gltf, GltfModel,
+};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -353,19 +356,20 @@ impl App {
         path: &str,
         auto_release: bool,
     ) -> Result<GltfModelAssetId> {
-        //let gltf_model: GltfModel = kani_volcano_animation::load_gltf_model(path)?;
+        let gltf_model: GltfModel = kani_volcano_animation::load_gltf(path)?;
 
         // send mesh to gpu
-        //let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_mesh_from_gltf_model(gltf_model)?;
+        let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_meshes_from_gltf(&gltf_model.meshes)?;
 
         // load texture
         //let texture_handle: TextureHandle=self.renderer.into_decoded_texture(gltf_model.images)
 
         // register texture
-        // self.resources.register_texture(name, texture_handle)
+        //self.resources.register_texture(name, texture_handle);
 
         // register model
-        //Ok(self.resources.register_gltf_model(name, gltf_model, mesh_handles))
+        //self.resources.register_gltf_model(name, gltf_model, mesh_handles)
+
         Ok(GltfModelAssetId(0))
     }
 

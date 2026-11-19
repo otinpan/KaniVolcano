@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{ensure, Context, Result};
 use cgmath::{vec2, vec3};
 use std::collections::HashMap;
 use std::fs::File;
@@ -6,6 +6,10 @@ use std::io::BufReader;
 
 use super::vertex::{
     DebugLineVertex, Lit3DVertex, Mesh3DVertex, SkyboxVertex, SourceVertex, Ui2DVertex,
+};
+
+use kani_volcano_animation::{
+    ModelPrimitive, PrimitiveTopology,
 };
 
 #[derive(Clone, Debug)]
@@ -81,6 +85,66 @@ fn triangle_indices_to_line_indices(indices: &[u32]) -> Vec<u32> {
 pub struct MeshData<V> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
+}
+
+/// Converts an unskinned triangle primitive for the Lit3D upload path.
+/// Normals are required; absent UVs default to zero.
+pub fn gltf_primitive_to_source(primitive: &ModelPrimitive) -> Result<SourceMesh> {
+    ensure!(
+        matches!(primitive.topology, PrimitiveTopology::Triangles),
+        "Only triangle primitives are currently supported"
+    );
+    ensure!(
+        primitive.joints.is_none() && primitive.weights.is_none(),
+        "Skinned primitives are not supported by SourceVertex yet"
+    );
+
+    let vertex_count = primitive.positions.len();
+    ensure!(vertex_count > 0, "Primitive has no positions");
+    let normals = primitive.normal.as_ref().context(
+        "Normals are required for Lit3D; normal generation is not implemented",
+    )?;
+    ensure!(
+        normals.len() == vertex_count,
+        "Normal count must match position count"
+    );
+    if let Some(uvs) = &primitive.tex_coord {
+        ensure!(uvs.len() == vertex_count, "UV count must match position count");
+    }
+
+    let indices = match &primitive.indices {
+        Some(indices) => indices.clone(),
+        None => {
+            let count = u32::try_from(vertex_count)
+                .context("Too many vertices for u32 indices")?;
+            (0..count).collect()
+        }
+    };
+    ensure!(
+        !indices.is_empty() && indices.len() % 3 == 0,
+        "Triangle index count must be a nonzero multiple of 3"
+    );
+    ensure!(
+        indices.iter().all(|&index| (index as usize) < vertex_count),
+        "Index references a nonexistent vertex"
+    );
+
+    let vertices = primitive.positions.iter().enumerate().map(|(i, position)| {
+        let normal = normals[i];
+        let uv = primitive.tex_coord.as_ref().map_or([0.0, 0.0], |uvs| uvs[i]);
+        SourceVertex {
+            pos: vec3(position[0], position[1], position[2]),
+            normal: vec3(normal[0], normal[1], normal[2]),
+            tex_coord: vec2(uv[0], uv[1]),
+            color: vec3(1.0, 1.0, 1.0),
+        }
+    }).collect();
+
+    Ok(SourceMesh {
+        vertices,
+        indices,
+        topology: SourceTopology::TriangleList,
+    })
 }
 
 pub fn load_model_source(file_path: &str) -> Result<SourceMesh> {

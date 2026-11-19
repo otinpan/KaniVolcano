@@ -30,6 +30,7 @@ use anyhow::{Result, anyhow};
 use cgmath::Matrix4;
 use kani_volcano_math::Transform;
 use kani_volcano_text::{LoadedFont, GlyphAtlas, TextSystem};
+use kani_volcano_animation::{ModelMesh};
 use std::mem::size_of;
 use std::ptr::copy_nonoverlapping as memcpy;
 use vulkanalia::prelude::v1_0::*;
@@ -48,7 +49,7 @@ use self::image::{
 };
 use self::instance::{VALIDATION_ENABLED, create_entry, create_instance};
 use self::mesh::create_mesh;
-pub use self::model::{MeshData, load_model_source};
+pub use self::model::{MeshData, load_model_source, gltf_primitive_to_source};
 pub use self::image::{DecodedTexture, decode_texture, decode_skybox_texture};
 pub use self::model::{SourceMesh, SourceTopology};
 use self::pipeline::{
@@ -315,6 +316,56 @@ impl VulkanRenderer {
         let mesh_data = source.to_lit3d_data();
 
         self.load_mesh_from_data(mesh_data, VertexLayout::Lit3D)
+    }
+
+    pub unsafe fn load_meshes_from_gltf(&mut self, meshes: &[ModelMesh]) -> Result<Vec<Vec<MeshHandle>>>{
+        let mut mesh_handles=Vec::with_capacity(meshes.len());
+
+        // record uploaded mesh to release when return error
+        let mut uploaded=Vec::new();
+
+        let result: Result<()> = (|| {
+            for mesh in meshes{
+                let mut primitive_handles=Vec::with_capacity(mesh.primitives.len());
+
+                for primitive in &mesh.primitives{
+                    let source: SourceMesh=gltf_primitive_to_source(primitive)?;
+                    let mesh_data=source.to_lit3d_data();
+
+                    let handle=self.load_mesh_from_data(mesh_data, VertexLayout::Lit3D)?;
+
+                    uploaded.push(handle);
+                    primitive_handles.push(handle);
+                }
+
+                mesh_handles.push(primitive_handles);
+            }
+
+            Ok(())
+        })();
+
+        if let Err(error) = result{
+            let mut cleanup_errors=Vec::new();
+
+            for handle in uploaded.into_iter().rev(){
+                if let Err(cleanup_error)=self.destroy_mesh(handle){
+                    cleanup_errors.push(cleanup_error.to_string());
+                }
+
+            }
+
+        if cleanup_errors.is_empty(){
+                return Err(error);
+            }
+
+            return Err(error.context(format!(
+                "GPU mesh cleanup alse faided: {}",
+                cleanup_errors.join("; "),
+            )));
+        }
+
+        Ok(mesh_handles)
+
     }
 
     pub unsafe fn load_texture(&mut self, path: &str) -> Result<TextureHandle> {

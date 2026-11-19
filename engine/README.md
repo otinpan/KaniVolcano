@@ -228,9 +228,8 @@ Main Thread
 		- skin: skinで使用する関節一覧
 		- animation: 運動の記述
 		- scene: シーンに含まれる
-	- Skeleton: 関節の階層構造
-	- Animation: 各関節の位置を更新
-	- Skinning: 関節行列と頂点ウェイトを使いメッシュの頂点を変形
+	- 静的なモデルの描画
+		- Materia
 * gltf/glbの読み込み
 	- gltfクレート
 	- meshの頂点・インデックスの読み込み

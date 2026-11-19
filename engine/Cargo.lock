@@ -1797,6 +1797,7 @@ dependencies = [
  "anyhow",
  "cgmath",
  "cosmic-text",
+ "kani-volcano-animation",
  "kani-volcano-math",
  "kani-volcano-text",
  "log",

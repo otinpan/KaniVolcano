@@ -233,7 +233,7 @@ impl Resources {
             anyhow::ensure!(asset.ref_count < usize::MAX, "mesh reference count exhausted: {mesh:?}");
         }
         for mesh in owned {
-            // increment mesh referejnce count
+            // increment mesh reference count
             self.retain_mesh(mesh);
         }
 
@@ -296,6 +296,7 @@ impl Resources {
         let mesh_assets = mesh_handles.into_iter().map(|handles| {
             handles.into_iter().map(|handle| self.insert_mesh_asset(handle, auto_release)).collect()
         }).collect();
+
         let id=self.insert_gltf_model_asset(
             gltf_model,
             mesh_assets,
