@@ -2,13 +2,13 @@ use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
-    Msaa,
+    Msaa, 
 };
 use kani_volcano_audio::{
     AudioSystem,
 };
 use kani_volcano_animation::{
-    load_gltf, GltfModel,
+    load_gltf, GltfModel, ModelMaterial,
 };
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -24,7 +24,7 @@ use crate::primitive::{
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
     UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
-    GltfModelAssetId, 
+    GltfModelAssetId, Material,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -362,15 +362,32 @@ impl App {
         let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_meshes_from_gltf(&gltf_model.meshes)?;
 
         // load texture
-        //let texture_handle: TextureHandle=self.renderer.into_decoded_texture(gltf_model.images)
+        let texture_handles: Vec<TextureHandle> = self.renderer.load_textures_from_gltf(
+            &gltf_model.images,
+            &gltf_model.textures,
+            &gltf_model.materials,
+        )?;
 
-        // register texture
-        //self.resources.register_texture(name, texture_handle);
+
+        // convert material
+        let materials: Vec<Material> = gltf_model.materials
+            .iter()
+            .map(|source| {
+                let mut material = convert_gltf_material(source);
+                // The loader validates references and returns handles in glTF texture order.
+                material.base_color_texture = source.base_color_texture
+                    .as_ref()
+                    .map(|reference| texture_handles[reference.texture]);
+                material.emissive_texture = source.emissive_texture
+                    .as_ref()
+                    .map(|reference| texture_handles[reference.texture]);
+                material
+            })
+            .collect();
+
 
         // register model
-        //self.resources.register_gltf_model(name, gltf_model, mesh_handles)
-
-        Ok(GltfModelAssetId(0))
+        self.resources.register_gltf_model(name, gltf_model, mesh_handles, materials, texture_handles, auto_release)
     }
 
     pub unsafe fn load_texture(&mut self, name: &str, path: &str) -> Result<TextureHandle> {
@@ -462,6 +479,37 @@ impl App {
         self.scheduler.render_commands.set_msaa(msaa);
     }
 
+}
+
+/// Converts material factors. Texture handles must be resolved after GPU upload.
+fn convert_gltf_material(model_material: &ModelMaterial) -> Material {
+    Material {
+        base_color: cgmath::vec4(
+            model_material.base_color[0],
+            model_material.base_color[1],
+            model_material.base_color[2],
+            model_material.base_color[3],
+        ),
+        metallic: model_material.metallic,
+        roughness: model_material.roughness,
+        normal_scale: model_material.normal_scale,
+        emissive_color: vec3(
+            model_material.emissive[0],
+            model_material.emissive[1],
+            model_material.emissive[2],
+        ),
+        emissive_strength: 1.0,
+        occlusion_strength: model_material.occlusion_strength,
+        alpha_mode: match model_material.alpha_mode {
+            kani_volcano_animation::ModelAlphaMode::Opaque => crate::component::AlphaMode::Opaque,
+            kani_volcano_animation::ModelAlphaMode::Mask => crate::component::AlphaMode::Mask,
+            kani_volcano_animation::ModelAlphaMode::Blend => crate::component::AlphaMode::Blend,
+        },
+        alpha_cutoff: model_material.alpha_cutoff,
+        double_sided: model_material.double_sided,
+        pipeline_key: PipelineKey::Pbr3D,
+        ..Material::default()
+    }
 }
 
 unsafe fn create_skybox_mesh(renderer: &mut VulkanRenderer, size: f32) -> Result<MeshHandle> {

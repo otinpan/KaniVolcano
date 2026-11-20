@@ -30,7 +30,9 @@ use anyhow::{Result, anyhow};
 use cgmath::Matrix4;
 use kani_volcano_math::Transform;
 use kani_volcano_text::{LoadedFont, GlyphAtlas, TextSystem};
-use kani_volcano_animation::{ModelMesh};
+use kani_volcano_animation::{
+    ModelMesh, ModelImage, ModelMaterial, ModelTexture,
+};
 use std::mem::size_of;
 use std::ptr::copy_nonoverlapping as memcpy;
 use vulkanalia::prelude::v1_0::*;
@@ -329,9 +331,12 @@ impl VulkanRenderer {
                 let mut primitive_handles=Vec::with_capacity(mesh.primitives.len());
 
                 for primitive in &mesh.primitives{
+                    // converts ModelPrimitive into SourceMesh
                     let source: SourceMesh=gltf_primitive_to_source(primitive)?;
+                    // converts SourceMesh into MeshData<Lit3DVertex>
                     let mesh_data=source.to_lit3d_data();
 
+                    // upload vertices and indices
                     let handle=self.load_mesh_from_data(mesh_data, VertexLayout::Lit3D)?;
 
                     uploaded.push(handle);
@@ -374,29 +379,101 @@ impl VulkanRenderer {
 
     // create gpu texture from pixels and register it to vulkan_renderer
     pub unsafe fn upload_decoded_texture(&mut self, image: &DecodedTexture) -> Result<TextureHandle> {
-        validate_decoded_texture(image, 1)?;
-        let texture = image::create_texture_from_pixels(&self.instance, &self.device, &mut self.data,
-            &image.pixels, image.width, image.height)?;
-        let index = self.data.textures.len();
-        self.data.textures.push(texture);
+        let handles = self.upload_decoded_textures(std::slice::from_ref(image))?;
+        Ok(handles[0])
+    }
 
-        if !self.data.descriptor_pool.is_null() && !self.data.uniform_buffers.is_empty() {
-            self.device.device_wait_idle()?;
-            self.device
-                .destroy_descriptor_pool(self.data.descriptor_pool, None);
-            self.data.global_descriptor_sets.clear();
-            self.data.material_descriptor_sets.clear();
-            self.data.light_descriptor_sets.clear();
-            self.data.skybox_descriptor_sets.clear();
-            create_descriptor_pool(&self.device, &mut self.data)?;
-            create_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_material_descriptor_sets(&self.device, &mut self.data)?;
-            create_light_descriptor_sets(&self.device, &mut self.data)?;
-            create_skybox_descriptor_sets(&self.device, &mut self.data)?;
+    /// Uploads sRGB glTF textures using the shared linear/repeat sampler.
+    /// Returned handles are indexed by glTF texture index, not image index.
+    /// Textures sharing an image share a handle. Linear material maps are rejected.
+    pub unsafe fn load_textures_from_gltf(
+        &mut self,
+        images: &[ModelImage],
+        textures: &[ModelTexture],
+        materials: &[ModelMaterial],
+    ) -> Result<Vec<TextureHandle>>{
+        let decoded = image::prepare_gltf_textures(images, textures, materials)?;
+        let (image_indices, decoded): (Vec<_>, Vec<_>) = decoded.into_iter().unzip();
+        let uploaded = self.upload_decoded_textures(&decoded)?;
+        let handles: std::collections::HashMap<_, _> =
+            image_indices.into_iter().zip(uploaded).collect();
+        Ok(textures.iter().map(|texture| handles[&texture.image]).collect())
+    }
+
+    /// Uploads RGBA8 sRGB images in input order, refreshing descriptors once.
+    /// Validates the entire batch before allocating GPU resources.
+    /// An empty batch performs no GPU work.
+    pub unsafe fn upload_decoded_textures(
+        &mut self,
+        images: &[DecodedTexture],
+    ) -> Result<Vec<TextureHandle>> {
+        for image in images {
+            validate_decoded_texture(image, 1)?;
         }
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Create all images before exposing handles or rebuilding descriptors.
+        let mut created = Vec::with_capacity(images.len());
+        let first = self.data.textures.len();
+        for decoded in images {
+            let result = image::create_texture_from_pixels(
+                &self.instance, &self.device, &mut self.data,
+                &decoded.pixels, decoded.width, decoded.height,
+            );
+            match result {
+                Ok(texture) => {
+                    created.push(texture);
+                }
+                Err(error) => {
+                    // Completed uploads have finished their transfer commands.
+                    for texture in created {
+                        self.device.destroy_image_view(texture.image_view, None);
+                        self.device.destroy_image(texture.image, None);
+                        self.device.free_memory(texture.image_memory, None);
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        self.data.textures.extend(created);
+        if let Err(error) = self.refresh_texture_descriptors() {
+            // The refresh waited for the device before replacing descriptors.
+            // Wait again before releasing images if the refresh itself failed.
+            self.device.device_wait_idle()?;
+            for texture in self.data.textures.drain(first..) {
+                self.device.destroy_image_view(texture.image_view, None);
+                self.device.destroy_image(texture.image, None);
+                self.device.free_memory(texture.image_memory, None);
+            }
+            if let Err(restore_error) = self.refresh_texture_descriptors() {
+                return Err(error.context(format!("Descriptor restoration failed: {restore_error}")));
+            }
+            return Err(error);
+        }
+        Ok((first..self.data.textures.len()).map(TextureHandle).collect())
+    }
 
-        Ok(TextureHandle(index))
+    unsafe fn refresh_texture_descriptors(&mut self) -> Result<()> {
+        if self.data.uniform_buffers.is_empty() {
+            return Ok(());
+        }
+        self.device.device_wait_idle()?;
+        if !self.data.descriptor_pool.is_null() {
+            self.device.destroy_descriptor_pool(self.data.descriptor_pool, None);
+            self.data.descriptor_pool = vk::DescriptorPool::null();
+        }
+        self.data.global_descriptor_sets.clear();
+        self.data.material_descriptor_sets.clear();
+        self.data.light_descriptor_sets.clear();
+        self.data.skybox_descriptor_sets.clear();
+        create_descriptor_pool(&self.device, &mut self.data)?;
+        create_global_descriptor_sets(&self.device, &mut self.data)?;
+        create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
+        create_material_descriptor_sets(&self.device, &mut self.data)?;
+        create_light_descriptor_sets(&self.device, &mut self.data)?;
+        create_skybox_descriptor_sets(&self.device, &mut self.data)?;
+        Ok(())
     }
 
     pub unsafe fn load_skybox_texture(&mut self, paths: [&str; 6]) -> Result<SkyboxTextureHandle> {

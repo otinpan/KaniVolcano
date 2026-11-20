@@ -9,11 +9,132 @@ use super::buffer::{begin_single_time_commands, create_buffer, end_single_time_c
 use super::types::{Texture, VulkanData};
 
 // texture //////////////////////////////////////////
+#[cfg(test)]
+mod gltf_texture_tests {
+    use super::*;
+    use kani_volcano_animation::{ModelImage, ModelImageFormat, ModelMaterial, ModelTexture, WrappingMode};
+
+    fn rgb_image() -> ModelImage {
+        ModelImage { pixels: vec![10, 20, 30], width: 1, height: 1, format: ModelImageFormat::R8G8B8 }
+    }
+
+    #[test]
+    fn converts_rgb_and_grayscale_alpha_without_flipping() {
+        assert_eq!(decode_gltf_image(&rgb_image()).unwrap().pixels, vec![10, 20, 30, 255]);
+        let image = ModelImage {
+            pixels: vec![12, 34, 56, 78], width: 1, height: 2, format: ModelImageFormat::R8G8,
+        };
+        assert_eq!(decode_gltf_image(&image).unwrap().pixels, vec![12, 12, 12, 34, 56, 56, 56, 78]);
+    }
+
+    #[test]
+    fn rejects_invalid_bytes_and_high_precision_images() {
+        let mut image = rgb_image();
+        image.pixels.pop();
+        assert!(decode_gltf_image(&image).is_err());
+        image.format = ModelImageFormat::R16;
+        assert!(decode_gltf_image(&image).is_err());
+        image.format = ModelImageFormat::R8G8B8;
+        image.width = 0;
+        assert!(decode_gltf_image(&image).is_err());
+    }
+
+    #[test]
+    fn deduplicates_images_and_validates_indices_and_samplers() {
+        let images = [rgb_image()];
+        let mut textures = [ModelTexture::default(), ModelTexture::default()];
+        assert_eq!(prepare_gltf_textures(&images, &textures, &[]).unwrap().len(), 1);
+        textures[1].image = 1;
+        assert!(prepare_gltf_textures(&images, &textures, &[]).is_err());
+        textures[1].image = 0;
+        textures[1].sampler.wrap_s = WrappingMode::ClampToEdge;
+        assert!(prepare_gltf_textures(&images, &textures, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_linear_maps_and_unsupported_uv_sets_before_upload() {
+        let mut material = ModelMaterial::default();
+        material.normal_texture = Some(Default::default());
+        assert!(prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[material]).is_err());
+        let mut material = ModelMaterial::default();
+        material.base_color_texture = Some(Default::default());
+        material.base_color_texture.as_mut().unwrap().tex_coord = 1;
+        assert!(prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[material]).is_err());
+    }
+}
+
 #[derive(Debug)]
 pub struct DecodedTexture {
     pub pixels: Vec<u8>,
     pub width: u32,
     pub height: u32,
+}
+
+/// Converts decoded glTF pixels without changing their color space or UV orientation.
+/// Higher precision formats are rejected rather than silently quantized.
+pub fn decode_gltf_image(image: &kani_volcano_animation::ModelImage) -> Result<DecodedTexture> {
+    use kani_volcano_animation::ModelImageFormat as Format;
+    let channels = match image.format {
+        Format::R8 => 1,
+        Format::R8G8 => 2,
+        Format::R8G8B8 => 3,
+        Format::R8G8B8A8 => 4,
+        format => return Err(anyhow!("Unsupported glTF image format: {format:?}")),
+    };
+    anyhow::ensure!(image.width > 0 && image.height > 0, "Image dimensions must be nonzero");
+    let count = (image.width as usize).checked_mul(image.height as usize)
+        .ok_or_else(|| anyhow!("Image dimensions overflow"))?;
+    let length = count.checked_mul(channels).ok_or_else(|| anyhow!("Image size overflow"))?;
+    anyhow::ensure!(image.pixels.len() == length, "Invalid glTF image byte count");
+    let capacity = count.checked_mul(4).ok_or_else(|| anyhow!("RGBA image size overflow"))?;
+    let mut pixels = Vec::with_capacity(capacity);
+    for pixel in image.pixels.chunks_exact(channels) {
+        let rgba = match channels {
+            1 => [pixel[0], pixel[0], pixel[0], 255],
+            2 => [pixel[0], pixel[0], pixel[0], pixel[1]],
+            3 => [pixel[0], pixel[1], pixel[2], 255],
+            _ => [pixel[0], pixel[1], pixel[2], pixel[3]],
+        };
+        pixels.extend_from_slice(&rgba);
+    }
+    Ok(DecodedTexture { pixels, width: image.width, height: image.height })
+}
+
+/// Validates the current sRGB-only glTF texture path before allocating GPU resources.
+pub(crate) fn prepare_gltf_textures(
+    images: &[kani_volcano_animation::ModelImage],
+    textures: &[kani_volcano_animation::ModelTexture],
+    materials: &[kani_volcano_animation::ModelMaterial],
+) -> Result<Vec<(usize, DecodedTexture)>> {
+    use kani_volcano_animation::{MagFilter, MinFilter, WrappingMode};
+    for material in materials {
+        anyhow::ensure!(
+            material.normal_texture.is_none() && material.metallic_roughness_texture.is_none()
+                && material.occlusion_texture.is_none(),
+            "Linear glTF textures are not supported by the sRGB upload path yet"
+        );
+        for reference in [&material.base_color_texture, &material.emissive_texture].into_iter().flatten() {
+            anyhow::ensure!(reference.texture < textures.len(), "Invalid glTF texture index");
+            anyhow::ensure!(reference.tex_coord == 0, "Only TEXCOORD_0 is supported");
+        }
+    }
+    let mut decoded = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for texture in textures {
+        let sampler = &texture.sampler;
+        anyhow::ensure!(
+            matches!(sampler.mag_filter, None | Some(MagFilter::Linear))
+                && matches!(sampler.min_filter, None | Some(MinFilter::LinearMipmapLinear))
+                && sampler.wrap_s == WrappingMode::Repeat
+                && sampler.wrap_t == WrappingMode::Repeat,
+            "glTF sampler requires unsupported filtering or wrapping"
+        );
+        let image = images.get(texture.image).ok_or_else(|| anyhow!("Invalid glTF image index"))?;
+        if seen.insert(texture.image) {
+            decoded.push((texture.image, decode_gltf_image(image)?));
+        }
+    }
+    Ok(decoded)
 }
 
 pub unsafe fn create_texture(

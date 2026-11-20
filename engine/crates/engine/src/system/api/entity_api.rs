@@ -33,6 +33,17 @@ pub trait EntityApi {
             }
         }
 
+        /*let gltf_asset_id=self
+            .world()
+            .get_component::<GltfModel>(entity)
+            .and_then(|gltf_model| gltf_model.asset_id);
+
+        if let Some(gltf_asset_id) = gltf_asset_id{
+            if let Some(gltf_model) = self.resources_mut().release_gltf(gltf_asset_id) {
+                // TODO: release gpu resources
+            }
+        }*/
+
         self.world_mut().despawn(entity)
     }
 

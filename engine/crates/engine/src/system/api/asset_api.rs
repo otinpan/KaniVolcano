@@ -2,7 +2,7 @@ use crate::app::{DEFAULT_SKYBOX_TEXTURE, DEFAULT_TEXTURE};
 use crate::{
     MeshAsset, MeshAssetId, PrimitiveType, RenderCommandApi, Resources,
     FontAsset, FontAssetId, AudioAsset, AudioAssetId, AudioEmitterResource, 
-    AudioEmitterId, AudioBusResource, AudioBusId,
+    AudioEmitterId, AudioBusResource, AudioBusId, GltfModelAssetId,
 };
 use anyhow::{Result, anyhow};
 use renderer_vulkan::{SkyboxTextureHandle, TextureHandle, VertexLayout};
@@ -19,6 +19,13 @@ pub trait AssetApi {
             .ok_or_else(|| anyhow!("model not found: {model_name}"))?;
 
         Ok(asset_id)
+    }
+
+    fn gltf_model_asset_id(&self, model_name: &str) -> Result<GltfModelAssetId>{
+        /*let asset_id = self
+            .resources()
+            .*/
+        Ok(GltfModelAssetId(0))
     }
 
     // return a MeshAssetId that match (primitive_type, vertex_layout)
