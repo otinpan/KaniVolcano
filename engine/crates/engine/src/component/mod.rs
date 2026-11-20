@@ -18,6 +18,8 @@ mod tags;
 mod text;
 mod draw_order;
 mod visibility;
+mod gltf_model;
+mod parent;
 
 pub use audio::AudioSource;
 pub use camera::Camera;
@@ -33,6 +35,8 @@ pub use tags::Tags;
 pub use text::{Text,TextPipeline};
 pub use visibility::Visibility;
 pub use draw_order::DrawOrder;
+pub use gltf_model::GltfModelRoot;
+pub use parent::ParentComponent;
 
 // Component does not have short reference like &'a str, &String
 pub trait Component: 'static {}

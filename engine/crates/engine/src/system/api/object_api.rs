@@ -1,11 +1,12 @@
-use anyhow::{Result, anyhow, bail};
-use cgmath::vec3;
+use anyhow::{Result, anyhow, bail, Context, ensure};
+use cgmath::{vec3, InnerSpace, Matrix3, Matrix4, Quaternion};
+use kani_volcano_animation::NodeTransform;
 use kani_volcano_math::Transform;
 use renderer_vulkan::PipelineKey;
 
 use crate::{
     AssetApi, EntityApi, EntityId, Material, MeshAssetId, MeshRenderer, PrimitiveShape, Visibility,
-    DrawOrder,
+    DrawOrder, GltfModelAssetId, GltfModelRoot, ParentComponent,
 };
 use crate::{
     Text, TextPipeline,
@@ -14,6 +15,138 @@ use crate::{
 
 pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec2 = cgmath::Vector2<f32>;
+
+fn spawn_gltf_node<A: EntityApi + ?Sized>(
+    api: &mut A,
+    model_id: GltfModelAssetId,
+    index: usize,
+    parent: EntityId,
+    material_override: Option<Material>,
+    created: &mut Vec<EntityId>,
+    visited: &mut std::collections::HashSet<usize>,
+) -> Result<()> {
+    ensure!(visited.insert(index), "Repeated or cyclic glTF node: {index}");
+    // Copy this node's instance data so Resources is no longer borrowed when spawning.
+    let (transform, children, primitives) = {
+        let resources = api.resources();
+        let asset = resources.gltf_model_asset(model_id).context("glTF model asset not found")?;
+        let node = asset.source.nodes.get(index).context("Invalid glTF node index")?;
+        ensure!(node.skin.is_none(), "Skinned nodes are not supported yet");
+        let mut primitives = Vec::new();
+        if let Some(mesh_index) = node.mesh {
+            let mesh = asset.source.meshes.get(mesh_index).context("Invalid glTF mesh index")?;
+            let ids = asset.meshes.get(mesh_index).context("Missing uploaded mesh")?;
+            ensure!(ids.len() == mesh.primitives.len(), "Primitive/mesh asset counts differ");
+            for (primitive, &id) in mesh.primitives.iter().zip(ids) {
+                let material = match material_override {
+                    Some(material) => material,
+                    None => match primitive.material {
+                        Some(index) => *asset.materials.get(index).context("Invalid material index")?,
+                        None => Material {
+                            metallic: 1.0, roughness: 1.0,
+                            pipeline_key: PipelineKey::Pbr3D,
+                            ..Material::default()
+                        },
+                    },
+                };
+                let handle = resources.get_mesh_handle(id).context("Mesh asset not found")?;
+                primitives.push(MeshRenderer::new(handle, material)?.with_asset_id(id));
+            }
+        }
+        (convert_node_transform(&node.transform)?, node.children.clone(), primitives)
+    };
+    let entity = api.spawn();
+    created.push(entity);
+    api.add_component(entity, ParentComponent::new(parent));
+    api.add_component(entity, transform);
+    for renderer in primitives {
+        let id = renderer.asset_id.expect("prepared renderer has an asset ID");
+        let count = api.resources().mesh_assets().find(|(key, _)| *key == id)
+            .context("Mesh asset not found")?.1.ref_count;
+        ensure!(count < usize::MAX, "Mesh reference count exhausted");
+        api.resources_mut().retain_mesh(id).context("Mesh asset not found")?;
+        let primitive = api.spawn();
+        created.push(primitive);
+        api.add_component(primitive, ParentComponent::new(entity));
+        api.add_component(primitive, Transform::default());
+        api.add_component(primitive, renderer);
+        api.add_component(primitive, Visibility::default());
+    }
+    for child in children {
+        spawn_gltf_node(api, model_id, child, entity, material_override, created, visited)?;
+    }
+    Ok(())
+}
+
+fn convert_node_transform(source: &NodeTransform) -> Result<Transform> {
+    let (position, scale, rotation, expected) = match source {
+        NodeTransform::Trs {
+            translation,
+            rotation,
+            scale,
+        } => {
+            let q = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]);
+            ensure!(
+                q.magnitude2().is_finite() && q.magnitude2() > 0.0,
+                "Invalid quaternion"
+            );
+            let rotation = Matrix3::from(q.normalize());
+            let position = vec3(translation[0], translation[1], translation[2]);
+            let scale = vec3(scale[0], scale[1], scale[2]);
+            let expected = Matrix4::from_translation(position)
+                * Matrix4::from(rotation)
+                * Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z);
+            (position, scale, rotation, expected)
+        }
+        NodeTransform::Matrix(values) => {
+            let matrix = Matrix4::from(*values);
+            let x = matrix.x.truncate();
+            let y = matrix.y.truncate();
+            let z = matrix.z.truncate();
+            let mut scale = vec3(x.magnitude(), y.magnitude(), z.magnitude());
+            ensure!(
+                scale.x > 0.0 && scale.y > 0.0 && scale.z > 0.0,
+                "Zero-scale matrix transforms cannot be decomposed; use TRS"
+            );
+            if x.cross(y).dot(z) < 0.0 {
+                scale.x = -scale.x;
+            }
+            let rotation = Matrix3::from_cols(x / scale.x, y / scale.y, z / scale.z);
+            (matrix.w.truncate(), scale, rotation, matrix)
+        }
+    };
+    // Transform::matrix uses Rx * Ry * Rz, in degrees.
+    let sin_y = rotation.z.x.clamp(-1.0, 1.0);
+    let cos_y = rotation.x.x.hypot(rotation.y.x);
+    let y = sin_y.atan2(cos_y);
+    let (x, z) = if cos_y > 1.0e-6 {
+        (
+            (-rotation.z.y).atan2(rotation.z.z),
+            (-rotation.y.x).atan2(rotation.x.x),
+        )
+    } else {
+        ((sin_y * rotation.x.y).atan2(rotation.y.y), 0.0)
+    };
+    let result = Transform {
+        position,
+        scale,
+        rotation: vec3(x.to_degrees(), y.to_degrees(), z.to_degrees()),
+    };
+    let actual: [[f32; 4]; 4] = result.matrix().into();
+    let expected: [[f32; 4]; 4] = expected.into();
+    ensure!(
+        actual
+            .iter()
+            .flatten()
+            .zip(expected.iter().flatten())
+            .all(|(&a, &b)| a.is_finite()
+                && b.is_finite()
+                && (a - b).abs() <= 1.0e-4 * b.abs().max(1.0)),
+        "Node transform cannot be represented by the current TRS Transform"
+    );
+    Ok(result)
+}
+
 
 pub trait ObjectApi: EntityApi + AssetApi {
     /// Replaces the material without rebuilding an existing mesh or its vertex colors.
@@ -72,14 +205,51 @@ pub trait ObjectApi: EntityApi + AssetApi {
         Ok(entity)
     }
 
+    /// Spawns the default scene (or first scene) with local node transforms.
+    /// None uses imported materials; Some overrides every primitive.
     fn spawn_gltf_model(
         &mut self,
         model_name: &str,
         transform: Transform,
-        material: Material
+        material: Option<Material>,
     ) -> Result<EntityId>{
-        Ok(EntityId(0))
+        let asset_id=self.gltf_model_asset_id(model_name)?;
+
+        // get all nodes from meshes[0]
+        let roots = {
+            let asset = AssetApi::resources(self).gltf_model_asset(asset_id)
+                .context("glTF model asset not found")?;
+            asset.source.scenes.get(asset.source.default_scene.unwrap_or(0))
+                .context("glTF model has no valid scene")?.roots.clone()
+        };
+        let root = self.spawn();
+        self.add_component(root, GltfModelRoot::new(asset_id));
+        self.add_component(root, transform);
+        let mut created = vec![root];
+        let mut visited = std::collections::HashSet::new();
+        let result = (|| {
+            for node in roots {
+                spawn_gltf_node(self, asset_id, node, root, material, &mut created, &mut visited)?;
+            }
+            AssetApi::resources_mut(self).retain_gltf_model(asset_id)
+        })();
+        if let Err(error) = result {
+            for entity in created.into_iter().rev() {
+                if let Some(renderer) = self.world_mut().remove_component::<MeshRenderer>(entity) {
+                    if let Some(id) = renderer.asset_id {
+                        if let Some(handle) = AssetApi::resources_mut(self).release_mesh(id) {
+                            EntityApi::render_commands_mut(self).destroy_mesh(handle);
+                        }
+                    }
+                }
+                // Roll back only this spawn; do not call the public despawn path.
+                self.world_mut().despawn(entity);
+            }
+            return Err(error);
+        }
+        Ok(root)
     }
+
 
     fn spawn_text_ui2d(
         &mut self,

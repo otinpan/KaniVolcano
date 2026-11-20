@@ -1,5 +1,5 @@
 use crate::{PrimitiveMesh, Material,  PrimitiveType};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use cgmath::Vector3;
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
@@ -220,6 +220,7 @@ impl Resources {
         id
     }
 
+    // Increment mesh ref count
     pub fn insert_gltf_model_asset(
         &mut self,
         gltf_model: GltfModel,
@@ -367,7 +368,13 @@ impl Resources {
         self.models.get(name).copied()
     }
 
+    pub fn gltf_model_asset_id(&self, name: &str) -> Option<GltfModelAssetId>{
+        self.gltf_models.get(name).copied()
+    }
 
+    pub(crate) fn gltf_model_asset(&self, id: GltfModelAssetId) -> Option<&GltfModelAsset> {
+        self.gltf_model_assets.get(id.0)?.as_ref()
+    }
 
     pub fn get_texture_handle(&self, name: &str) -> Option<TextureHandle> {
         self.textures.get(name).copied()
@@ -507,6 +514,37 @@ impl Resources {
         Some(asset.handle)
     }
 
+    pub fn retain_gltf_model(&mut self, id: GltfModelAssetId) -> Result<()>{
+        let model=self.gltf_model_assets
+            .get_mut(id.0)
+            .and_then(Option::as_mut)
+            .ok_or_else(|| anyhow!("glTF model asset not found: {id:?}"))?;
+
+        model.ref_count = model.ref_count
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!(
+                "glTF model reference count exhausted: {id:?}"
+            ))?;
+
+        Ok(())
+    }
+
+    /// Releases one instance reference and returns meshes eligible for GPU destruction.
+    #[must_use]
+    pub fn release_gltf_model(&mut self, id: GltfModelAssetId) -> Vec<MeshHandle> {
+        let Some(model) = self.gltf_model_assets.get_mut(id.0).and_then(Option::as_mut) else {
+            return Vec::new();
+        };
+        if model.ref_count == 0 {
+            return Vec::new();
+        }
+        model.ref_count -= 1;
+        if model.ref_count == 0 && model.auto_release {
+            return self.remove_gltf_model_asset(id);
+        }
+        Vec::new()
+    }
+
     pub fn release_mesh(&mut self, id: MeshAssetId) -> Option<MeshHandle> {
         let asset = self.mesh_assets.get_mut(id.0)?.as_mut()?;
 
@@ -536,6 +574,7 @@ impl Resources {
 
         Ok(())
     }
+
 }
 
 impl Default for Resources {

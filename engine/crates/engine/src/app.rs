@@ -359,6 +359,7 @@ impl App {
         let gltf_model: GltfModel = kani_volcano_animation::load_gltf(path)?;
 
         // send mesh to gpu
+        // increment mesh ref count
         let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_meshes_from_gltf(&gltf_model.meshes)?;
 
         // load texture

@@ -1,7 +1,8 @@
 use crate::{
     Component, ComponentPool, EntityId, MeshRenderer, RenderCommandQueue, Resources, World,
-    MeshAssetId,
+    MeshAssetId, GltfModelRoot, ParentComponent,
 };
+use std::collections::{HashMap, HashSet};
 
 pub trait EntityApi {
     fn world(&self) -> &World;
@@ -22,29 +23,42 @@ pub trait EntityApi {
             return false;
         }
 
-        let asset_id = self
-            .world()
-            .get_component::<MeshRenderer>(entity)
-            .and_then(|mesh_renderer| mesh_renderer.asset_id);
-
-        if let Some(asset_id) = asset_id {
-            if let Some(mesh) = self.resources_mut().release_mesh(asset_id) {
-                self.render_commands_mut().destroy_mesh(mesh);
+        let mut children = HashMap::<EntityId, Vec<EntityId>>::new();
+        for (child, parent) in self.world().query1::<ParentComponent>() {
+            children.entry(parent.parent).or_default().push(child);
+        }
+        let mut stack = vec![entity];
+        let mut order = Vec::new();
+        let mut visited = HashSet::new();
+        while let Some(current) = stack.pop() {
+            if visited.insert(current) {
+                order.push(current);
+                if let Some(children) = children.remove(&current) {
+                    stack.extend(children);
+                }
             }
         }
-
-        /*let gltf_asset_id=self
-            .world()
-            .get_component::<GltfModel>(entity)
-            .and_then(|gltf_model| gltf_model.asset_id);
-
-        if let Some(gltf_asset_id) = gltf_asset_id{
-            if let Some(gltf_model) = self.resources_mut().release_gltf(gltf_asset_id) {
-                // TODO: release gpu resources
+        // Descendants release their mesh references before the model's ownership reference.
+        for current in order.into_iter().rev() {
+            let mesh_id = self.world().get_component::<MeshRenderer>(current)
+                .and_then(|renderer| renderer.asset_id);
+            if let Some(id) = mesh_id {
+                if let Some(handle) = self.resources_mut().release_mesh(id) {
+                    self.render_commands_mut().destroy_mesh(handle);
+                }
             }
-        }*/
-
-        self.world_mut().despawn(entity)
+            let model_id = self.world().get_component::<GltfModelRoot>(current)
+                .map(|root| root.model_id);
+            // decrement model reference counter and children's mesh reference counter
+            if let Some(id) = model_id {
+                for handle in self.resources_mut().release_gltf_model(id) {
+                    // if chidlren's mesh reference counter is zero, release mesh
+                    self.render_commands_mut().destroy_mesh(handle);
+                }
+            }
+            self.world_mut().despawn(current);
+        }
+        true
     }
 
     fn despawn_last(&mut self) -> bool {
@@ -221,6 +235,65 @@ mod tests {
             asset_id,
             material: Material::default(),
         }
+    }
+
+    #[test]
+    fn despawn_releases_shared_model_only_after_last_instance() {
+        for auto_release in [true, false] {
+            let mut context = TestContext::default();
+            let handle = MeshHandle::new(0, VertexLayout::Mesh3D);
+            let model = context.resources.register_gltf_model(
+                "model", kani_volcano_animation::GltfModel::default(),
+                vec![vec![handle]], vec![], vec![], auto_release,
+            ).unwrap();
+            let mesh = context.resources.gltf_model_asset(model).unwrap().meshes[0][0];
+            let mut roots = Vec::new();
+            for _ in 0..2 {
+                let root = context.spawn();
+                roots.push(root);
+                context.add_component(root, GltfModelRoot::new(model));
+                context.resources.retain_gltf_model(model).unwrap();
+                let node = context.spawn();
+                context.add_component(node, ParentComponent::new(root));
+                // Two renderers sharing one mesh must each release their reference.
+                for _ in 0..2 {
+                    let child = context.spawn();
+                    context.add_component(child, ParentComponent::new(node));
+                    context.resources.retain_mesh(mesh);
+                    context.add_component(child, mesh_renderer(Some(mesh)));
+                }
+            }
+            let unrelated = context.spawn();
+            assert!(context.despawn(roots[0]));
+            assert_eq!(context.entity_count(), 5);
+            assert_eq!(context.resources.gltf_model_asset(model).unwrap().ref_count, 1);
+            assert_eq!(context.resources.mesh_assets().next().unwrap().1.ref_count, 3);
+            assert_eq!(context.render_commands.drain().count(), 0);
+            assert!(context.despawn(roots[1]));
+            assert_eq!(context.entities(), &[unrelated]);
+            assert_eq!(context.render_commands.drain().count(), usize::from(auto_release));
+            assert!(!context.despawn(roots[1]));
+            assert_eq!(context.render_commands.drain().count(), 0);
+            if auto_release {
+                assert!(context.resources.gltf_model_asset(model).is_none());
+                assert!(context.resources.get_mesh_handle(mesh).is_none());
+            } else {
+                assert_eq!(context.resources.gltf_model_asset(model).unwrap().ref_count, 0);
+                assert_eq!(context.resources.mesh_assets().next().unwrap().1.ref_count, 1);
+            }
+        }
+    }
+
+    #[test]
+    fn despawn_handles_parent_cycles_without_double_release() {
+        let mut context = TestContext::default();
+        let first = context.spawn();
+        let second = context.spawn();
+        context.add_component(first, ParentComponent::new(second));
+        context.add_component(second, ParentComponent::new(first));
+        assert!(context.despawn(first));
+        assert_eq!(context.entity_count(), 0);
+        assert!(!context.despawn(first));
     }
 
     #[test]
