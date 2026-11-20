@@ -105,11 +105,11 @@ pub unsafe fn create_ui2d_pipeline(device: &Device, data: &mut VulkanData) -> Re
     let vert_push_constant_range = vk::PushConstantRange::builder()
         .stage_flags(vk::ShaderStageFlags::VERTEX)
         .offset(0)
-        .size(16);
+        .size(64);
 
     let frag_push_constant_range = vk::PushConstantRange::builder()
         .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-        .offset(16)
+        .offset(64)
         .size(32);
 
     // Layout

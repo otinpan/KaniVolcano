@@ -37,7 +37,7 @@ pub use render_system::{RenderContext, RenderSystem};
 pub use scene_command::{SceneCommand, SceneCommandQueue};
 pub use scheduler::Scheduler;
 pub use update::{
-    CameraSystem, RotatorSystem, ScheduledUpdateSystem, ThreadProfilerSystem,
+    CameraSystem, RotatorSystem, ScheduledUpdateSystem, ThreadProfilerSystem, TransformSystem,
     UpdateContext, UpdateSystem};
 pub use text_render_system::{TextRenderSystem, TextLayout};
 pub use asset_load_system::{AssetLoadSystem, AssetLoadOutcome, AssetKind};

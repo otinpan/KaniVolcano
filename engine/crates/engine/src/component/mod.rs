@@ -20,6 +20,7 @@ mod draw_order;
 mod visibility;
 mod gltf_model;
 mod parent;
+mod global_transform;
 
 pub use audio::AudioSource;
 pub use camera::Camera;
@@ -37,6 +38,7 @@ pub use visibility::Visibility;
 pub use draw_order::DrawOrder;
 pub use gltf_model::GltfModelRoot;
 pub use parent::ParentComponent;
+pub use global_transform::GlobalTransform;
 
 // Component does not have short reference like &'a str, &String
 pub trait Component: 'static {}

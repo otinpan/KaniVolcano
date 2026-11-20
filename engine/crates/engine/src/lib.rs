@@ -20,6 +20,8 @@ mod time;
 mod world;
 
 pub use app::App;
+pub use component::GlobalTransform;
+pub use system::TransformSystem;
 pub use component::{
     Camera, CameraComponent, Component, Material, MeshRenderer, Name, PendingPrimitiveMesh,
     Rotator, SceneId, SceneOwned, Tags, Visibility, Text, TextPipeline, AudioSource,
@@ -55,6 +57,7 @@ pub use kani_volcano_audio::PlaybackSettings;
 pub use world::World;
 
 pub mod prelude {
+    pub use crate::{GlobalTransform, TransformSystem};
     pub use crate::{
         App, AssetApi, AssetLoadApi, AudioApi, JobApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,

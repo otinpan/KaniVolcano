@@ -487,6 +487,16 @@ impl Basic3dScene {
                 ..Material::default()
             },
         );
+
+        let refrigerator=context.spawn_gltf_model(
+            "refrigerator",
+            Transform { 
+                position: vec3(-2.0,0.0,-1.0),
+                rotation: vec3(45.0,0.0,0.0), 
+                ..Default::default()
+            },
+            None,
+        );
         Ok(())
     }
 

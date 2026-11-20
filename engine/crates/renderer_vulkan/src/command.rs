@@ -63,12 +63,6 @@ const _: () = {
 };
 
 #[repr(C)]
-#[derive(Copy, Clone)]
-struct Ui2DTransformPushConstants {
-    transform: [f32; 4],
-}
-
-#[repr(C)]
 #[derive(Clone, Copy)]
 struct TextPushConstants {
     transform: [[f32; 4]; 4],
@@ -92,6 +86,34 @@ impl TextPushConstants {
 #[cfg(test)]
 mod text_tests {
     use super::*;
+
+    #[test]
+    fn ui_matrix_preserves_yz_position_scale_and_vertical_flip() {
+        let transform = kani_volcano_math::Transform {
+            position: vec3(9.0, 0.25, -0.5),
+            scale: vec3(7.0, 2.0, -3.0),
+            ..Default::default()
+        };
+        for (x, y) in [(-0.5, -0.5), (0.5, 0.5), (0.0, 0.0)] {
+            let world = transform.matrix() * cgmath::Vector4::new(0.0, x, y, 1.0);
+            assert_eq!(world.y, x * transform.scale.y + transform.position.y);
+            assert_eq!(-world.z, -(y * transform.scale.z + transform.position.z));
+        }
+    }
+
+    #[test]
+    fn ui_matrix_applies_parent_rotation_in_yz_plane() {
+        let parent = kani_volcano_math::Transform {
+            rotation: vec3(90.0, 0.0, 0.0), ..Default::default()
+        };
+        let child = kani_volcano_math::Transform {
+            position: vec3(0.0, 2.0, 0.0), ..Default::default()
+        };
+        let world = parent.matrix() * child.matrix() * cgmath::Vector4::new(0.0, 1.0, 0.0, 1.0);
+        assert!(world.y.abs() < 1.0e-5);
+        assert!((-world.z + 3.0).abs() < 1.0e-5);
+        assert_eq!(std::mem::size_of::<Mat4>(), 64);
+    }
 
     #[test]
     fn secondary_buffers_survive_repeated_image_index_changes() {
@@ -521,9 +543,9 @@ fn sorted_render_indices(data: &VulkanData) -> Vec<usize> {
     let camera_position = data.camera.position;
     transparent_indices.sort_by(|&a, &b| {
         let distance_a =
-            distance_squared(data.render_objects[a].transform.position, camera_position);
+            distance_squared(data.render_objects[a].matrix.w.truncate(), camera_position);
         let distance_b =
-            distance_squared(data.render_objects[b].transform.position, camera_position);
+            distance_squared(data.render_objects[b].matrix.w.truncate(), camera_position);
 
         distance_b
             .partial_cmp(&distance_a)
@@ -587,7 +609,7 @@ unsafe fn update_secondary_command_buffer(
         return Ok(command_buffer);
     };
 
-    let model = object.transform.matrix();
+    let model = object.matrix;
 
     let model_bytes =
         std::slice::from_raw_parts(&model as *const Mat4 as *const u8, size_of::<Mat4>());
@@ -758,18 +780,6 @@ unsafe fn update_secondary_command_buffer(
         PipelineKey::Ui2D => {
             let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
             let sets = [material_set];
-            let ui_transform = Ui2DTransformPushConstants {
-                transform: [
-                    object.transform.position.y,
-                    object.transform.position.z,
-                    object.transform.scale.y,
-                    object.transform.scale.z,
-                ],
-            };
-            let ui_transform_bytes = std::slice::from_raw_parts(
-                &ui_transform as *const Ui2DTransformPushConstants as *const u8,
-                std::mem::size_of::<Ui2DTransformPushConstants>(),
-            );
 
             renderer.device.cmd_bind_descriptor_sets(
                 command_buffer,
@@ -785,14 +795,14 @@ unsafe fn update_secondary_command_buffer(
                 pipeline.layout,
                 vk::ShaderStageFlags::VERTEX,
                 0,
-                ui_transform_bytes,
+                model_bytes,
             );
 
             renderer.device.cmd_push_constants(
                 command_buffer,
                 pipeline.layout,
                 vk::ShaderStageFlags::FRAGMENT,
-                16,
+                64,
                 material_bytes,
             );
         }

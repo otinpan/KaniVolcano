@@ -45,3 +45,14 @@
     - 参照数が0かつ、モデルのauto_release==trueなら、`resources.remove_gltf_model_asset()`を呼ぶ
     - 戻り値のMeshHanleを描画コマンドに渡して、GPUメッシュを破棄する
 
+* ロード途中の失敗時にGPU資産の回収
+* テクスチャの個別解放
+
+
+| 順序 | 機能 | 主な変更範囲 | 重さの目安 |
+|---|---|---|---|
+| 1 | linear形式で画像のロード | GPU画像作成、glTFテクスチャロード、Material変換、descriptor | 中 |
+| 2 | ロード失敗時のGPU資産回収 | ロード処理、rendererの作成・破棄 | 中 |
+| 3 | テクスチャ自動解放 | Resources、Material、参照管理、descriptor | 大 |
+| 4 | glTF非同期ロード | 既存のAssetLoadSystem、要求・結果の型、GPU登録処理 | 中〜大 |
+| 5 | ノードアニメーション→スキニング | Component、system、補間、GPU頂点・シェーダー | 大 |

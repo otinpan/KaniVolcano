@@ -265,6 +265,8 @@ impl Scheduler {
         renderer: &mut VulkanRenderer,
         resources: &mut Resources,
     ) -> Result<()> {
+        // Run after gameplay updates, including frames where simulation is paused.
+        super::TransformSystem::default().update_world(world)?;
         let mut context = RenderContext::new(world, resources, renderer, &mut self.render_commands);
 
         self.render_system.update(&mut context)?;

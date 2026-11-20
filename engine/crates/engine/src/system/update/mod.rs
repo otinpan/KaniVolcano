@@ -11,6 +11,7 @@ use cgmath::{Vector2, Vector3};
 mod camera_system;
 mod rotator_system;
 mod thread_profiler_system;
+mod transform_system;
 
 pub use super::render_command::RenderCommandQueue;
 pub use super::asset_load_command::AssetLoadCommandQueue;
@@ -33,6 +34,7 @@ use crate::{
 pub use camera_system::CameraSystem;
 pub use rotator_system::RotatorSystem;
 pub use thread_profiler_system::ThreadProfilerSystem;
+pub use transform_system::TransformSystem;
 
 type Vec2 = Vector2<f32>;
 type Vec3 = Vector3<f32>;

@@ -63,6 +63,12 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
         PipelineKey::DebugLine3D,
         false,
     )?;
+
+    app.load_gltf_model(
+        "refrigerator",
+        "assets/models/refrigerator.glb",
+        true,
+    )?;
     /*app.load_model(
         "viking_room_lit3d",
         "assets/models/viking_room.obj",

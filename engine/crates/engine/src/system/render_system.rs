@@ -8,7 +8,7 @@ use renderer_vulkan::{
 use super::render_command::{RenderCommand, RenderCommandQueue};
 use crate::AssetApi;
 use crate::primitive::{PrimitiveMesh, create_primitive_with_layout, update_primitive_mesh};
-use crate::{EntityId, MeshAssetId, Resources, World, DrawOrder};
+use crate::{EntityId, MeshAssetId, Resources, World, GlobalTransform, DrawOrder};
 
 use crate::component::{Camera, Component, MeshRenderer, PendingPrimitiveMesh, Visibility};
 
@@ -174,10 +174,10 @@ impl RenderSystem {
         // render entities whitch have MeshRenderer and Transform
         // if entity have Visibility and it is false, this entity is not be rendered
         let render_items = context
-            .query2::<Transform, MeshRenderer>()
+            .query2::<GlobalTransform, MeshRenderer>()
             .map(|(entity, transform, mesh_renderer)| RenderItem {
                 mesh_index: mesh_renderer.mesh,
-                transform: transform.clone(),
+                matrix: transform.matrix,
                 material: (&mesh_renderer.material).into(),
                 is_visible: context
                     .get_component::<Visibility>(entity)

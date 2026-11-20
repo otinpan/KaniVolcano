@@ -201,7 +201,7 @@ pub enum RenderAlphaMode {
 #[derive(Clone, Debug)]
 pub struct RenderItem {
     pub mesh_index: MeshHandle,
-    pub transform: Transform,
+    pub matrix: Matrix4<f32>,
     pub material: RenderMaterial,
     pub is_visible: bool,
     pub draw_order: i32,
