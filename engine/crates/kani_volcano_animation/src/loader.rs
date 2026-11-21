@@ -174,6 +174,7 @@ fn parse_material(material: gltf::Material<'_>) -> ModelMaterial {
             tex_coord: info.tex_coord(),
         }),
         emissive: material.emissive_factor(),
+        emissive_strength: material.emissive_strength().unwrap_or(1.0),
         emissive_texture: material.emissive_texture().map(parse_texture_ref),
         alpha_mode: match material.alpha_mode() {
             gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,

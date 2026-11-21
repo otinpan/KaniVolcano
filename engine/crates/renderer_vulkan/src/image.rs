@@ -76,6 +76,18 @@ mod gltf_texture_tests {
     }
 
     #[test]
+    fn occlusion_uv0_uploads_linear_and_validates_texture_index() {
+        let mut material = ModelMaterial::default();
+        material.occlusion_texture = Some(Default::default());
+        let prepared = prepare_gltf_textures(
+            &[rgb_image()], &[ModelTexture::default()], std::slice::from_ref(&material),
+        ).unwrap();
+        assert_eq!(prepared.uploads, vec![(0, TextureColorSpace::Linear)]);
+        assert_eq!(prepared.textures, vec![[None, Some(0)]]);
+        assert!(prepare_gltf_textures(&[], &[], &[material]).is_err());
+    }
+
+    #[test]
     fn unused_textures_require_no_uploads() {
         let prepared = prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[]).unwrap();
         assert!(prepared.images.is_empty());
@@ -152,7 +164,6 @@ pub(crate) fn prepare_gltf_textures(
     use std::collections::HashMap;
     let mut required = vec![[false; 2]; textures.len()];
     for material in materials {
-        // Temporarily skip occlusion until its rendering and UV1 support are implemented.
         for (reference, slot) in [
             (&material.base_color_texture, 0), (&material.emissive_texture, 0),
             (&material.normal_texture, 1), (&material.metallic_roughness_texture, 1),
@@ -162,6 +173,18 @@ pub(crate) fn prepare_gltf_textures(
                 let usage = required.get_mut(reference.texture)
                     .ok_or_else(|| anyhow!("Invalid glTF texture index"))?;
                 usage[slot] = true;
+            }
+        }
+        if let Some(reference) = &material.occlusion_texture {
+            if reference.tex_coord == 0 {
+                let usage = required.get_mut(reference.texture)
+                    .ok_or_else(|| anyhow!("Invalid glTF texture index"))?;
+                usage[1] = true;
+            } else {
+                log::warn!(
+                    "glTF occlusion texture {}: TEXCOORD_{} is unsupported; skipping occlusion",
+                    reference.texture, reference.tex_coord,
+                );
             }
         }
     }

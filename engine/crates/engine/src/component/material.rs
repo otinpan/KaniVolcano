@@ -23,6 +23,7 @@ pub struct Material {
     pub emissive_texture: Option<TextureHandle>,
 
     pub occlusion_strength: f32,
+    pub occlusion_texture: Option<TextureHandle>,
 
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: f32,
@@ -52,6 +53,7 @@ impl Material {
         emissive_strength: f32,
         emissive_texture: Option<TextureHandle>,
         occlusion_strength: f32,
+        occlusion_texture: Option<TextureHandle>,
         alpha_mode: AlphaMode,
         alpha_cutoff: f32,
         double_sided: bool,
@@ -69,6 +71,7 @@ impl Material {
             emissive_color,
             emissive_texture,
             occlusion_strength,
+            occlusion_texture,
             alpha_mode,
             alpha_cutoff,
             double_sided,
@@ -93,6 +96,7 @@ impl From<&Material> for renderer_vulkan::RenderMaterial {
             emissive_strength: material.emissive_strength,
             emissive_texture: material.emissive_texture,
             occlusion_strength: material.occlusion_strength,
+            occlusion_texture: material.occlusion_texture,
             alpha_mode: match material.alpha_mode {
                 AlphaMode::Opaque => renderer_vulkan::RenderAlphaMode::Opaque,
                 AlphaMode::Mask => renderer_vulkan::RenderAlphaMode::Mask,
@@ -123,6 +127,7 @@ impl Default for Material {
             emissive_texture: None,
 
             occlusion_strength: 1.0,
+            occlusion_texture: None,
 
             alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: 0.5,

@@ -385,6 +385,10 @@ impl App {
                 material.metallic_roughness_texture = source.metallic_roughness_texture
                     .as_ref()
                     .and_then(|reference| texture_handles[reference.texture].linear);
+                material.occlusion_texture = source.occlusion_texture
+                    .as_ref()
+                    .filter(|reference| reference.tex_coord==0)
+                    .and_then(|reference| texture_handles[reference.texture].linear);
                 material
             })
             .collect();
@@ -513,7 +517,7 @@ fn convert_gltf_material(model_material: &ModelMaterial) -> Material {
             model_material.emissive[1],
             model_material.emissive[2],
         ),
-        emissive_strength: 1.0,
+        emissive_strength: model_material.emissive_strength,
         occlusion_strength: model_material.occlusion_strength,
         alpha_mode: match model_material.alpha_mode {
             kani_volcano_animation::ModelAlphaMode::Opaque => crate::component::AlphaMode::Opaque,

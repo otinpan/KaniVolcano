@@ -86,6 +86,7 @@ pub struct ModelMaterial{
 
     pub emissive: [f32; 3],
     pub emissive_texture: Option<TextureRef>,
+    pub emissive_strength: f32,
 
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: f32,
@@ -192,6 +193,7 @@ impl Default for ModelMaterial {
             occlusion_strength: 1.0,
             emissive: [0.0; 3],
             emissive_texture: None,
+            emissive_strength: 1.0,
             alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: 0.5,
             transmission_factor: 0.0,

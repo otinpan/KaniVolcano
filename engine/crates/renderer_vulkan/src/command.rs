@@ -42,7 +42,7 @@ impl From<&super::types::RenderMaterial> for PbrMaterialPushConstants {
                 material.metallic,
                 material.roughness,
                 if material.base_color_texture.is_some() { 1.0 } else { 0.0 },
-                0.0,
+                material.occlusion_strength,
             ],
             emissive: [
                 material.emissive_color.x,

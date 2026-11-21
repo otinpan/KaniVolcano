@@ -9,6 +9,7 @@ const int MAX_SPOT_LIGHTS = 8;
 layout(set = 1, binding = 0) uniform sampler2D baseColorSampler;
 layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessSampler;
 layout(set = 1, binding = 2) uniform sampler2D emissiveSampler;
+layout(set = 1, binding = 3) uniform sampler2D occlusionSampler;
 
 // Pbr3D requires this additional fragment-visible camera UBO (16 bytes).
 // set 0, binding 0 remains the vertex shader's view/projection UBO.
@@ -37,7 +38,7 @@ layout(std140, set = 2, binding = 0) uniform LightUniform {
 // other texture maps, alpha modes and IBL are not implemented yet.
 layout(push_constant) uniform PbrMaterialPushConstants {
   layout(offset = 64) vec4 baseColor;
-  // x = metallic, y = roughness, z = use base-color texture (0/1), w reserved
+  // x = metallic, y = roughness, z = use base-color texture (0/1), w = occlusion strength
   layout(offset = 80) vec4 materialParams;
   layout(offset = 96) vec4 emissive; // rgb = color, a = strength
 } pcs;
@@ -144,8 +145,10 @@ void main() {
 
   // Temporary diffuse-only ambient approximation, not environment reflections.
   vec3 ambientFresnel = fresnelSchlick(max(dot(N, V), 0.0), f0);
+  float ao = mix(1.0, texture(occlusionSampler, fragTexCoord).r,
+      clamp(pcs.materialParams.w, 0.0, 1.0));
   color += light.ambientColor.rgb * light.ambientColor.a
-      * (vec3(1.0) - ambientFresnel) * (1.0 - metallic) * baseColor;
+      * (vec3(1.0) - ambientFresnel) * (1.0 - metallic) * baseColor * ao;
   vec3 emissiveSample = texture(emissiveSampler, fragTexCoord).rgb;
   color += max(pcs.emissive.rgb, vec3(0.0)) * max(pcs.emissive.a, 0.0) * emissiveSample;
 

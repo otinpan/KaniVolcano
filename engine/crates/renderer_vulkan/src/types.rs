@@ -206,6 +206,7 @@ pub struct RenderMaterial {
     pub emissive_strength: f32,
     pub emissive_texture: Option<TextureHandle>,
     pub occlusion_strength: f32,
+    pub occlusion_texture: Option<TextureHandle>,
     pub alpha_mode: RenderAlphaMode,
     pub alpha_cutoff: f32,
     pub double_sided: bool,
@@ -220,7 +221,7 @@ impl RenderMaterial {
             self.base_color_texture.unwrap_or(fallback),
             self.metallic_roughness_texture.unwrap_or(fallback),
             self.emissive_texture.unwrap_or(fallback),
-            fallback, // Occlusion texture is not exposed by RenderMaterial yet.
+            self.occlusion_texture.unwrap_or(fallback), 
             // The shader must bypass normal mapping when normal_texture is None.
             self.normal_texture.unwrap_or(fallback),
         ]
