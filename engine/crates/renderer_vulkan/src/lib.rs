@@ -155,6 +155,7 @@ impl VulkanRenderer {
         create_global_descriptor_set_layout(&device, &mut data)?;
         create_pbr_descriptor_set_layout(&device, &mut data)?;
         create_material_descriptor_set_layout(&device, &mut data)?;
+        uniform::create_pbr_material_descriptor_set_layout(&device, &mut data)?;
         create_light_descriptor_set_layout(&device, &mut data)?;
         create_skybox_descriptor_set_layout(&device, &mut data)?;
         create_pipelines(&device, &mut data)?;
@@ -201,6 +202,11 @@ impl VulkanRenderer {
             .wait_for_fences(&[in_flight_fence], true, u64::MAX)?;
         self.text_buffers.completed(self.frame);
         self.text_buffers.trim(&self.device, &mut self.data);
+
+        // TODO: Check materials in RenderItems.
+        // If material pipeline_key=Pbr3D, create material_descriptors.
+        // 
+        self.prepare_pbr_material_descriptors()?;
 
         // 2. When get swapchain image, then signal image_available_semaphore
         let result = self.device.acquire_next_image_khr(
@@ -488,6 +494,7 @@ impl VulkanRenderer {
         Ok(handles[0])
     }
 
+    // TODO: Speedup. Clearing all descriptors and recreating descriptors slow loading time
     unsafe fn refresh_texture_descriptors(&mut self) -> Result<()> {
         if self.data.uniform_buffers.is_empty() {
             return Ok(());
@@ -507,6 +514,46 @@ impl VulkanRenderer {
         create_material_descriptor_sets(&self.device, &mut self.data)?;
         create_light_descriptor_sets(&self.device, &mut self.data)?;
         create_skybox_descriptor_sets(&self.device, &mut self.data)?;
+        Ok(())
+    }
+
+    unsafe fn prepare_pbr_material_descriptors(&mut self) -> Result<()> {
+        let mut missing = std::collections::HashSet::new();
+        for object in &self.data.render_objects {
+            if !object.is_visible || object.material.pipeline_key != PipelineKey::Pbr3D {
+                continue;
+            }
+            let key = object.material.pbr_texture_key();
+            if !self.data.pbr_material_descriptor_sets.contains_key(&key) {
+                missing.insert(key);
+            }
+        }
+        if missing.is_empty() {
+            return Ok(());
+        }
+
+        let textures: Vec<_> = missing.into_iter().collect();
+        let count = u32::try_from(textures.len())?;
+        let descriptor_count = count.checked_mul(5)
+            .ok_or_else(|| anyhow!("Too many PBR material descriptors"))?;
+        let sizes = [vk::DescriptorPoolSize::builder()
+            .type_(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(descriptor_count)];
+        let info = vk::DescriptorPoolCreateInfo::builder()
+            .max_sets(count)
+            .pool_sizes(&sizes);
+        let pool = self.device.create_descriptor_pool(&info, None)?;
+        let sets = match uniform::create_pbr_material_descriptor_sets(
+            &self.device, &self.data, pool, &textures,
+        ) {
+            Ok(sets) => sets,
+            Err(error) => {
+                self.device.destroy_descriptor_pool(pool, None);
+                return Err(error);
+            }
+        };
+        self.data.pbr_material_descriptor_sets.extend(textures.into_iter().zip(sets));
+        self.data.pbr_material_descriptor_pools.push(pool);
         Ok(())
     }
 
@@ -803,6 +850,7 @@ impl VulkanRenderer {
                 global_descriptor_set_layout: self.data.global_descriptor_set_layout,
                 pbr_global_descriptor_set_layout: self.data.pbr_global_descriptor_set_layout,
                 material_descriptor_set_layout: self.data.material_descriptor_set_layout,
+                pbr_material_descriptor_set_layout: self.data.pbr_material_descriptor_set_layout,
                 light_descriptor_set_layout: self.data.light_descriptor_set_layout,
                 skybox_descriptor_set_layout: self.data.skybox_descriptor_set_layout,
                 ..VulkanData::default()
@@ -987,6 +1035,14 @@ impl VulkanRenderer {
         self.destroy_swapchain();
 
         self.gpu_glyph_atlas.destroy(&self.device);
+
+        for pool in self.data.pbr_material_descriptor_pools.drain(..) {
+            self.device.destroy_descriptor_pool(pool, None);
+        }
+        self.data.pbr_material_descriptor_sets.clear();
+        self.device.destroy_descriptor_set_layout(
+            self.data.pbr_material_descriptor_set_layout, None,
+        );
 
         self.data
             .command_pools

@@ -16,6 +16,7 @@ impl Scene for MaterialScene {
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         crate::system::FpsSystem::install(context)?;
+        context.set_msaa(Msaa::X4);
         self.create_camera(context)?;
         self.create_spheres(context)?;
         context.add_update_system("camera", CameraSystem);

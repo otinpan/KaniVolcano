@@ -116,7 +116,7 @@ pub unsafe fn create_pbr3d_pipeline(device: &Device, data: &mut VulkanData) -> R
     // Layout
     let set_layouts = &[
         data.pbr_global_descriptor_set_layout,
-        data.material_descriptor_set_layout,
+        data.pbr_material_descriptor_set_layout,
         data.light_descriptor_set_layout,
     ];
     let push_constant_ranges = &[vert_push_constant_range, frag_push_constant_range];

@@ -83,86 +83,6 @@ impl TextPushConstants {
     }
 }
 
-#[cfg(test)]
-mod text_tests {
-    use super::*;
-
-    #[test]
-    fn ui_matrix_preserves_yz_position_scale_and_vertical_flip() {
-        let transform = kani_volcano_math::Transform {
-            position: vec3(9.0, 0.25, -0.5),
-            scale: vec3(7.0, 2.0, -3.0),
-            ..Default::default()
-        };
-        for (x, y) in [(-0.5, -0.5), (0.5, 0.5), (0.0, 0.0)] {
-            let world = transform.matrix() * cgmath::Vector4::new(0.0, x, y, 1.0);
-            assert_eq!(world.y, x * transform.scale.y + transform.position.y);
-            assert_eq!(-world.z, -(y * transform.scale.z + transform.position.z));
-        }
-    }
-
-    #[test]
-    fn ui_matrix_applies_parent_rotation_in_yz_plane() {
-        let parent = kani_volcano_math::Transform {
-            rotation: vec3(90.0, 0.0, 0.0), ..Default::default()
-        };
-        let child = kani_volcano_math::Transform {
-            position: vec3(0.0, 2.0, 0.0), ..Default::default()
-        };
-        let world = parent.matrix() * child.matrix() * cgmath::Vector4::new(0.0, 1.0, 0.0, 1.0);
-        assert!(world.y.abs() < 1.0e-5);
-        assert!((-world.z + 3.0).abs() < 1.0e-5);
-        assert_eq!(std::mem::size_of::<Mat4>(), 64);
-    }
-
-    #[test]
-    fn secondary_buffers_survive_repeated_image_index_changes() {
-        let mut buffers = Vec::new();
-        ensure_secondary_command_buffer_images(&mut buffers, 2);
-        for (index, image_buffers) in buffers.iter_mut().enumerate() {
-            image_buffers.resize(index + 1, vk::CommandBuffer::null());
-        }
-        let expected = buffers.clone();
-        for image_index in [0, 1, 2, 0, 2, 1] {
-            ensure_secondary_command_buffer_images(&mut buffers, image_index);
-            assert_eq!(buffers, expected);
-        }
-        ensure_secondary_command_buffer_images(&mut buffers, 3);
-        assert_eq!(&buffers[..3], expected.as_slice());
-        assert!(buffers[3].is_empty());
-    }
-
-    #[test]
-    fn push_constants_match_text_shader_offsets() {
-        assert_eq!(std::mem::size_of::<TextPushConstants>(), 96);
-        assert_eq!(std::mem::offset_of!(TextPushConstants, transform), 0);
-        assert_eq!(std::mem::offset_of!(TextPushConstants, color), 64);
-        assert_eq!(std::mem::offset_of!(TextPushConstants, viewport_size), 80);
-        assert_eq!(std::mem::offset_of!(TextPushConstants, padding), 88);
-    }
-
-    #[test]
-    fn push_constants_preserve_transform_and_combine_opacity() {
-        let item = super::super::types::TextRenderItem {
-            pipeline_key: PipelineKey::TextUi2D,
-            mesh: super::super::types::MeshHandle::new(0, VertexLayout::Ui2D),
-            atlas_page: 0,
-            transform: kani_volcano_math::Transform {
-                position: vec3(20.0, 30.0, 0.0),
-                rotation: vec3(0.0, 0.0, 45.0),
-                scale: vec3(2.0, 3.0, 1.0),
-            },
-            alpha: 0.5,
-            color: [1.0, 0.25, 0.75, 0.5],
-        };
-        let constants = TextPushConstants::new(&item, vk::Extent2D { width: 1280, height: 720 });
-        let expected: [[f32; 4]; 4] = item.transform.matrix().into();
-        assert_eq!(constants.transform, expected);
-        assert_eq!(constants.color, [1.0, 0.25, 0.75, 0.25]);
-        assert_eq!(constants.viewport_size, [1280.0, 720.0]);
-        assert_eq!(constants.padding, [0.0; 2]);
-    }
-}
 
 // command pool ////////////////////////////////////////////////////////////
 // created command buffers are pushed into graphics queue in render()
@@ -808,7 +728,7 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Pbr3D => {
             let pbr_global_set = renderer.data.pbr_global_descriptor_sets[image_index];
-            let material_set=renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let material_set = renderer.data.pbr_material_descriptor_sets[&object.material.pbr_texture_key()];
             let light_set = renderer.data.light_descriptor_sets[image_index];
 
             let sets = [pbr_global_set, material_set, light_set];
@@ -860,4 +780,86 @@ unsafe fn update_secondary_command_buffer(
     renderer.device.end_command_buffer(command_buffer)?;
 
     Ok(command_buffer)
+}
+
+
+#[cfg(test)]
+mod text_tests {
+    use super::*;
+
+    #[test]
+    fn ui_matrix_preserves_yz_position_scale_and_vertical_flip() {
+        let transform = kani_volcano_math::Transform {
+            position: vec3(9.0, 0.25, -0.5),
+            scale: vec3(7.0, 2.0, -3.0),
+            ..Default::default()
+        };
+        for (x, y) in [(-0.5, -0.5), (0.5, 0.5), (0.0, 0.0)] {
+            let world = transform.matrix() * cgmath::Vector4::new(0.0, x, y, 1.0);
+            assert_eq!(world.y, x * transform.scale.y + transform.position.y);
+            assert_eq!(-world.z, -(y * transform.scale.z + transform.position.z));
+        }
+    }
+
+    #[test]
+    fn ui_matrix_applies_parent_rotation_in_yz_plane() {
+        let parent = kani_volcano_math::Transform {
+            rotation: vec3(90.0, 0.0, 0.0), ..Default::default()
+        };
+        let child = kani_volcano_math::Transform {
+            position: vec3(0.0, 2.0, 0.0), ..Default::default()
+        };
+        let world = parent.matrix() * child.matrix() * cgmath::Vector4::new(0.0, 1.0, 0.0, 1.0);
+        assert!(world.y.abs() < 1.0e-5);
+        assert!((-world.z + 3.0).abs() < 1.0e-5);
+        assert_eq!(std::mem::size_of::<Mat4>(), 64);
+    }
+
+    #[test]
+    fn secondary_buffers_survive_repeated_image_index_changes() {
+        let mut buffers = Vec::new();
+        ensure_secondary_command_buffer_images(&mut buffers, 2);
+        for (index, image_buffers) in buffers.iter_mut().enumerate() {
+            image_buffers.resize(index + 1, vk::CommandBuffer::null());
+        }
+        let expected = buffers.clone();
+        for image_index in [0, 1, 2, 0, 2, 1] {
+            ensure_secondary_command_buffer_images(&mut buffers, image_index);
+            assert_eq!(buffers, expected);
+        }
+        ensure_secondary_command_buffer_images(&mut buffers, 3);
+        assert_eq!(&buffers[..3], expected.as_slice());
+        assert!(buffers[3].is_empty());
+    }
+
+    #[test]
+    fn push_constants_match_text_shader_offsets() {
+        assert_eq!(std::mem::size_of::<TextPushConstants>(), 96);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, transform), 0);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, color), 64);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, viewport_size), 80);
+        assert_eq!(std::mem::offset_of!(TextPushConstants, padding), 88);
+    }
+
+    #[test]
+    fn push_constants_preserve_transform_and_combine_opacity() {
+        let item = super::super::types::TextRenderItem {
+            pipeline_key: PipelineKey::TextUi2D,
+            mesh: super::super::types::MeshHandle::new(0, VertexLayout::Ui2D),
+            atlas_page: 0,
+            transform: kani_volcano_math::Transform {
+                position: vec3(20.0, 30.0, 0.0),
+                rotation: vec3(0.0, 0.0, 45.0),
+                scale: vec3(2.0, 3.0, 1.0),
+            },
+            alpha: 0.5,
+            color: [1.0, 0.25, 0.75, 0.5],
+        };
+        let constants = TextPushConstants::new(&item, vk::Extent2D { width: 1280, height: 720 });
+        let expected: [[f32; 4]; 4] = item.transform.matrix().into();
+        assert_eq!(constants.transform, expected);
+        assert_eq!(constants.color, [1.0, 0.25, 0.75, 0.25]);
+        assert_eq!(constants.viewport_size, [1280.0, 720.0]);
+        assert_eq!(constants.padding, [0.0; 2]);
+    }
 }

@@ -7,7 +7,7 @@ use vulkanalia::prelude::v1_0::*;
 
 use super::VulkanRenderer;
 use super::buffer::create_buffer;
-use super::types::VulkanData;
+use super::types::{TextureHandle, VulkanData};
 
 type Mat4 = cgmath::Matrix4<f32>;
 
@@ -93,6 +93,73 @@ pub unsafe fn create_material_descriptor_set_layout(
     data.material_descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
 
     Ok(())
+}
+
+pub unsafe fn create_pbr_material_descriptor_set_layout(
+    device: &Device,
+    data: &mut VulkanData,
+) -> Result<()> {
+    let sampler_bindings: Vec<_> = (0..5).map(|binding| {
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(binding)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+    }).collect();
+    let info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(&sampler_bindings);
+    data.pbr_material_descriptor_set_layout = device.create_descriptor_set_layout(&info, None)?;
+    Ok(())
+}
+
+/// Creates one set per texture combination, in input order.
+/// Bindings: base color, metallic-roughness, emissive, occlusion, normal.
+/// The caller supplies valid fallback handles for absent textures and owns the pool
+/// (which needs five combined image sampler descriptors per set).
+pub unsafe fn create_pbr_material_descriptor_sets(
+    device: &Device,
+    data: &VulkanData,
+    pool: vk::DescriptorPool,
+    textures: &[[TextureHandle; 5]],
+) -> Result<Vec<vk::DescriptorSet>> {
+    if textures.is_empty() {
+        return Ok(Vec::new());
+    }
+    anyhow::ensure!(
+        pool != vk::DescriptorPool::null()
+            && data.pbr_material_descriptor_set_layout != vk::DescriptorSetLayout::null()
+            && data.texture_sampler != vk::Sampler::null(),
+        "PBR material descriptor layout, pool and sampler must be created first"
+    );
+    for handles in textures {
+        for handle in handles {
+            anyhow::ensure!(
+                data.textures.get(handle.0)
+                    .is_some_and(|texture| texture.image_view != vk::ImageView::null()),
+                "Invalid PBR texture handle: {}", handle.0
+            );
+        }
+    }
+
+    let layouts = vec![data.pbr_material_descriptor_set_layout; textures.len()];
+    let info = vk::DescriptorSetAllocateInfo::builder()
+        .descriptor_pool(pool)
+        .set_layouts(&layouts);
+    let sets = device.allocate_descriptor_sets(&info)?;
+    for (&set, handles) in sets.iter().zip(textures) {
+        for (binding, handle) in handles.iter().enumerate() {
+            let image_infos = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(data.textures[handle.0].image_view)
+                .sampler(data.texture_sampler)];
+            let write = vk::WriteDescriptorSet::builder()
+                .dst_set(set)
+                .dst_binding(binding as u32)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(&image_infos);
+            device.update_descriptor_sets(&[write], &[] as &[vk::CopyDescriptorSet]);
+        }
+    }
+    Ok(sets)
 }
 
 pub unsafe fn create_light_descriptor_set_layout(
@@ -197,6 +264,39 @@ pub unsafe fn create_global_descriptor_sets(device: &Device, data: &mut VulkanDa
     Ok(())
 }
 
+
+pub unsafe fn create_material_descriptor_sets(
+    device: &Device,
+    data: &mut VulkanData,
+) -> Result<()> {
+    let layouts = vec![data.material_descriptor_set_layout; data.textures.len()];
+    let info = vk::DescriptorSetAllocateInfo::builder()
+        .descriptor_pool(data.descriptor_pool)
+        .set_layouts(&layouts);
+
+    // allocate memory for descriptor set.
+    data.material_descriptor_sets = device.allocate_descriptor_sets(&info)?;
+
+    for i in 0..data.textures.len() {
+        let image_info = vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(data.textures[i].image_view)
+            .sampler(data.texture_sampler);
+
+        let image_infos = &[image_info];
+
+        let sampler_write = vk::WriteDescriptorSet::builder()
+            .dst_set(data.material_descriptor_sets[i])
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(image_infos);
+
+        device.update_descriptor_sets(&[sampler_write], &[] as &[vk::CopyDescriptorSet]);
+    }
+
+    Ok(())
+}
+
 /// Requires an existing pool with room for one set and two UBO descriptors
 /// per swapchain image, plus initialized view/projection and camera buffers.
 pub unsafe fn create_pbr_global_descriptor_sets(
@@ -253,38 +353,6 @@ pub unsafe fn create_pbr_global_descriptor_sets(
     }
 
     data.pbr_global_descriptor_sets = descriptor_sets;
-    Ok(())
-}
-
-pub unsafe fn create_material_descriptor_sets(
-    device: &Device,
-    data: &mut VulkanData,
-) -> Result<()> {
-    let layouts = vec![data.material_descriptor_set_layout; data.textures.len()];
-    let info = vk::DescriptorSetAllocateInfo::builder()
-        .descriptor_pool(data.descriptor_pool)
-        .set_layouts(&layouts);
-
-    // allocate memory for descriptor set.
-    data.material_descriptor_sets = device.allocate_descriptor_sets(&info)?;
-
-    for i in 0..data.textures.len() {
-        let image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(data.textures[i].image_view)
-            .sampler(data.texture_sampler);
-
-        let image_infos = &[image_info];
-
-        let sampler_write = vk::WriteDescriptorSet::builder()
-            .dst_set(data.material_descriptor_sets[i])
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(image_infos);
-
-        device.update_descriptor_sets(&[sampler_write], &[] as &[vk::CopyDescriptorSet]);
-    }
-
     Ok(())
 }
 

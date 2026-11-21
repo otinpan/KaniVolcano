@@ -4,9 +4,10 @@ const float PI = 3.14159265359;
 const int MAX_POINT_LIGHTS = 8;
 const int MAX_SPOT_LIGHTS = 8;
 
-// Uses the existing material descriptor layout. Bind a valid fallback texture
-// even when disabled. Base-color RGB is decoded by the sRGB image format.
+// PBR material descriptors. Base-color RGB is decoded by the sRGB image format.
+// Metallic-roughness uses a linear image, with white as the absent-map fallback.
 layout(set = 1, binding = 0) uniform sampler2D baseColorSampler;
+layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessSampler;
 
 // Pbr3D requires this additional fragment-visible camera UBO (16 bytes).
 // set 0, binding 0 remains the vertex shader's view/projection UBO.
@@ -31,7 +32,7 @@ layout(std140, set = 2, binding = 0) uniform LightUniform {
 
 // Vertex model matrix occupies bytes 0..63.
 // Pbr3D must upload 48 fragment bytes at offset 64; total range is 112 bytes.
-// Colors are linear. Only the base-color texture is supported so far;
+// Colors are linear. Base-color and metallic-roughness textures are supported;
 // other texture maps, alpha modes and IBL are not implemented yet.
 layout(push_constant) uniform PbrMaterialPushConstants {
   layout(offset = 64) vec4 baseColor;
@@ -101,9 +102,10 @@ void main() {
     base *= texture(baseColorSampler, fragTexCoord);
   }
   vec3 baseColor = clamp(base.rgb * fragColor, 0.0, 1.0);
-  float metallic = clamp(pcs.materialParams.x, 0.0, 1.0);
+  vec4 mr = texture(metallicRoughnessSampler, fragTexCoord);
+  float metallic = clamp(pcs.materialParams.x * mr.b, 0.0, 1.0);
   // Avoid the singular perfectly smooth GGX distribution.
-  float roughness = clamp(pcs.materialParams.y, 0.045, 1.0);
+  float roughness = clamp(pcs.materialParams.y * mr.g, 0.045, 1.0);
   vec3 f0 = mix(vec3(0.04), baseColor, metallic);
 
   vec3 color = evaluateLight(N, V, safeNormalize(-light.directionalDirection.xyz),

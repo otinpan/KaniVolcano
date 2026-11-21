@@ -1,5 +1,6 @@
 use cgmath::{Matrix4, vec3};
 use vulkanalia::prelude::v1_0::*;
+use std::collections::HashMap;
 
 use super::model::MeshData;
 use super::vertex::{DebugLineVertex, Mesh3DVertex, SourceVertex, VertexLayout};
@@ -30,11 +31,14 @@ pub struct VulkanData {
     pub global_descriptor_set_layout: vk::DescriptorSetLayout,
     pub pbr_global_descriptor_set_layout: vk::DescriptorSetLayout,
     pub material_descriptor_set_layout: vk::DescriptorSetLayout,
+    pub pbr_material_descriptor_set_layout: vk::DescriptorSetLayout,
     pub light_descriptor_set_layout: vk::DescriptorSetLayout,
     pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
     pub global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub pbr_global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub material_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub pbr_material_descriptor_sets: HashMap<[TextureHandle;5], vk::DescriptorSet>,
+    pub pbr_material_descriptor_pools: Vec<vk::DescriptorPool>,
     pub light_descriptor_sets: Vec<vk::DescriptorSet>,
     pub skybox_descriptor_sets: Vec<vk::DescriptorSet>,
     pub descriptor_pool: vk::DescriptorPool,
@@ -203,6 +207,21 @@ pub struct RenderMaterial {
     pub alpha_cutoff: f32,
     pub double_sided: bool,
     pub pipeline_key: PipelineKey,
+}
+
+impl RenderMaterial {
+    /// Binding order shared by descriptor preparation and command recording.
+    pub(crate) fn pbr_texture_key(&self) -> [TextureHandle; 5] {
+        let fallback = TextureHandle(0);
+        [
+            self.base_color_texture.unwrap_or(fallback),
+            self.metallic_roughness_texture.unwrap_or(fallback),
+            self.emissive_texture.unwrap_or(fallback),
+            fallback, // Occlusion texture is not exposed by RenderMaterial yet.
+            // The shader must bypass normal mapping when normal_texture is None.
+            self.normal_texture.unwrap_or(fallback),
+        ]
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

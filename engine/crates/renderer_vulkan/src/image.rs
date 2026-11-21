@@ -364,6 +364,7 @@ pub unsafe fn create_texture_from_pixels_with_color_space(
     memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
     device.unmap_memory(staging_buffer_memory);
 
+    // create image (VkImage) for gpu
     let (image, image_memory) = create_image(
         instance,
         device,
@@ -380,6 +381,7 @@ pub unsafe fn create_texture_from_pixels_with_color_space(
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
     )?;
 
+    // copy image from staging buffer to VkImage
     transition_image_layout(
         device,
         data,
@@ -389,7 +391,6 @@ pub unsafe fn create_texture_from_pixels_with_color_space(
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         mip_levels,
     )?;
-
     copy_buffer_to_image(device, data, staging_buffer, image, width, height)?;
 
     device.destroy_buffer(staging_buffer, None);
