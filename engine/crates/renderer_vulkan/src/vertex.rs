@@ -12,6 +12,13 @@ use super::types::VulkanData;
 type Vec2 = cgmath::Vector2<f32>;
 type Vec3 = cgmath::Vector3<f32>;
 
+
+#[derive(Clone, Copy, Debug)]
+pub struct SkinInfluence{
+    pub joints: [u16; 4],
+    pub weights: [f32; 4],
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct SourceVertex {
@@ -19,15 +26,26 @@ pub struct SourceVertex {
     pub color: Vec3,
     pub tex_coord: Vec2, // points of a texture
     pub normal: Vec3,
+    pub tangent: Option<[f32; 4]>,
+    pub skin: Option<SkinInfluence>,
 }
 
 impl SourceVertex {
-    pub fn new(pos: Vec3, color: Vec3, tex_coord: Vec2, normal: Vec3) -> Self {
+    pub fn new(
+        pos: Vec3,
+        color: Vec3, 
+        tex_coord: Vec2, 
+        normal: Vec3,
+        tangent: Option<[f32; 4]>,
+        skin: Option<SkinInfluence>,
+    ) -> Self {
         Self {
             pos,
             color,
             tex_coord,
             normal,
+            tangent, 
+            skin,
         }
     }
 }
@@ -39,6 +57,7 @@ pub enum VertexLayout {
     Lit3D,
     Ui2D,
     Skybox,
+    SkinnedVertex,
 }
 
 #[repr(C)]
@@ -222,6 +241,7 @@ pub struct Lit3DVertex {
     pub color: Vec3,
     pub tex_coord: Vec2,
     pub normal: Vec3,
+    pub tangent: [f32; 4],
 }
 
 impl From<&SourceVertex> for Lit3DVertex {
@@ -231,17 +251,19 @@ impl From<&SourceVertex> for Lit3DVertex {
             color: v.color,
             tex_coord: v.tex_coord,
             normal: v.normal,
+            tangent: v.tangent.unwrap_or([0.0; 4]),
         }
     }
 }
 
 impl Lit3DVertex {
-    pub const fn new(pos: Vec3, color: Vec3, tex_coord: Vec2, normal: Vec3) -> Self {
+    pub const fn new(pos: Vec3, color: Vec3, tex_coord: Vec2, normal: Vec3, tangent: Option<[f32; 4]>) -> Self {
         Self {
             pos,
             color,
             tex_coord,
             normal,
+            tangent: match tangent { Some(value) => value, None => [0.0; 4] },
         }
     }
 
@@ -253,7 +275,7 @@ impl Lit3DVertex {
             .build()
     }
 
-    pub fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 4] {
+    pub fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 5] {
         let pos = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(0)
@@ -281,8 +303,13 @@ impl Lit3DVertex {
             .format(vk::Format::R32G32B32_SFLOAT)
             .offset((size_of::<Vec3>() + size_of::<Vec3>() + size_of::<Vec2>()) as u32)
             .build();
-
-        [pos, color, tex_coord, normal]
+        let tangent= vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(4)
+            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .offset(std::mem::offset_of!(Lit3DVertex, tangent) as u32)
+            .build();
+        [pos, color, tex_coord, normal, tangent]
     }
 }
 
@@ -382,4 +409,16 @@ impl SkyboxVertex {
 
         [pos]
     }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct SkinnedVertex{
+    pub pos: Vec3,
+    pub color: Vec3,
+    pub tex_coord: Vec2,
+    pub normal: Vec3,
+    pub tangent: [f32; 4],
+    pub joints: [u16; 4],
+    pub weights: [f32; 4],
 }

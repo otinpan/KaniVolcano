@@ -336,6 +336,7 @@ impl App {
         let vertex_layout = pipeline_key.required_vertex_layout();
 
         let handle = match vertex_layout {
+            VertexLayout::SkinnedVertex => return Err(anyhow!("Skinned model loading is not supported yet")),
             VertexLayout::Mesh3D => self.renderer.load_mesh3d_from_model(path)?,
             VertexLayout::DebugLine3D => self.renderer.load_debug_line_from_model(path)?,
             VertexLayout::Lit3D => self.renderer.load_lit3d_from_model(path)?,
@@ -382,6 +383,9 @@ impl App {
                 material.emissive_texture = source.emissive_texture
                     .as_ref()
                     .and_then(|reference| texture_handles[reference.texture].srgb);
+                material.normal_texture = source.normal_texture
+                    .as_ref()
+                    .and_then(|reference| texture_handles[reference.texture].linear);
                 material.metallic_roughness_texture = source.metallic_roughness_texture
                     .as_ref()
                     .and_then(|reference| texture_handles[reference.texture].linear);
@@ -511,7 +515,10 @@ fn convert_gltf_material(model_material: &ModelMaterial) -> Material {
         ),
         metallic: model_material.metallic,
         roughness: model_material.roughness,
-        normal_scale: model_material.normal_scale,
+        // Temporarily reduce the imported normal scale to 10% to soften exaggerated bumps 
+        // while glTF texture transforms and tangent generation are not fully supported. 
+        // This is a visual workaround, not an accurate reproduction of the original material.
+        normal_scale: model_material.normal_scale * 0.1, 
         emissive_color: vec3(
             model_material.emissive[0],
             model_material.emissive[1],

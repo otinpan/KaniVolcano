@@ -29,7 +29,7 @@ fn main() -> Result<()> {
             app.add_scene(ParallelCalculatorScene::default())?;
             app.add_scene(MaterialScene::default())?;
 
-            app.set_current_scene("Basic3dScene")?;
+            app.set_current_scene("BasicFieldScene")?;
             Ok(())
         },
     )
@@ -88,12 +88,12 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
         true,
     )?;
 
-    /*app.load_model(
+    app.load_model(
         "viking_room_lit3d",
         "assets/models/viking_room.obj",
         PipelineKey::Lit3D,
         false,
-    )?;*/
+    )?;
     Ok(())
 }
 

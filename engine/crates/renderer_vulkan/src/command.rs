@@ -32,6 +32,7 @@ struct PbrMaterialPushConstants {
     base_color: [f32; 4],
     material_params: [f32; 4],
     emissive: [f32; 4],
+    normal_params: [f32; 4],
 }
 
 impl From<&super::types::RenderMaterial> for PbrMaterialPushConstants {
@@ -50,16 +51,22 @@ impl From<&super::types::RenderMaterial> for PbrMaterialPushConstants {
                 material.emissive_color.z,
                 material.emissive_strength,
             ],
+            normal_params: [
+                material.normal_scale,
+                if material.normal_texture.is_some() { 1.0 } else { 0.0 },
+                0.0, 0.0,
+            ],
         }
     }
 }
 
-// The raw byte upload requires exactly three contiguous vec4 values.
+// The raw byte upload requires exactly four contiguous vec4 values.
 const _: () = {
-    assert!(size_of::<PbrMaterialPushConstants>() == 48);
+    assert!(size_of::<PbrMaterialPushConstants>() == 64);
     assert!(std::mem::offset_of!(PbrMaterialPushConstants, base_color) == 0);
     assert!(std::mem::offset_of!(PbrMaterialPushConstants, material_params) == 16);
     assert!(std::mem::offset_of!(PbrMaterialPushConstants, emissive) == 32);
+    assert!(std::mem::offset_of!(PbrMaterialPushConstants, normal_params) == 48);
 };
 
 #[repr(C)]

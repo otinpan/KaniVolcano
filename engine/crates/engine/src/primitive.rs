@@ -191,6 +191,7 @@ pub unsafe fn create_primitive_with_layout(
     auto_release: bool,
 ) -> Result<PrimitiveMesh> {
     match vertex_layout {
+        VertexLayout::SkinnedVertex => Err(anyhow!("Skinned primitives are not supported yet")),
         VertexLayout::Mesh3D => create_primitive_mesh3d(renderer, resources, shape, auto_release),
         VertexLayout::DebugLine3D => {
             create_primitive_debug_line(renderer, resources, shape, auto_release)
@@ -226,9 +227,9 @@ pub fn build_primitive_source(shape: PrimitiveShape) -> SourceMesh {
 fn build_triangle_source(points: [Vec3; 3], color: Vec3) -> SourceMesh {
     let normal = face_normal(points[0], points[1], points[2]);
     let vertices = vec![
-        SourceVertex::new(points[0], color, vec2(0.0, 0.0), normal),
-        SourceVertex::new(points[1], color, vec2(1.0, 0.0), normal),
-        SourceVertex::new(points[2], color, vec2(0.5, 1.0), normal),
+        SourceVertex::new(points[0], color, vec2(0.0, 0.0), normal, None, None),
+        SourceVertex::new(points[1], color, vec2(1.0, 0.0), normal, None, None),
+        SourceVertex::new(points[2], color, vec2(0.5, 1.0), normal, None, None),
     ];
 
     let indices = vec![0, 1, 2];
@@ -243,10 +244,10 @@ fn build_triangle_source(points: [Vec3; 3], color: Vec3) -> SourceMesh {
 fn build_rectangle_source(points: [Vec3; 4], color: Vec3) -> SourceMesh {
     let normal = face_normal(points[0], points[1], points[2]);
     let vertices = vec![
-        SourceVertex::new(points[0], color, vec2(0.0, 0.0), normal),
-        SourceVertex::new(points[1], color, vec2(1.0, 0.0), normal),
-        SourceVertex::new(points[2], color, vec2(1.0, 1.0), normal),
-        SourceVertex::new(points[3], color, vec2(0.0, 1.0), normal),
+        SourceVertex::new(points[0], color, vec2(0.0, 0.0), normal, None, None),
+        SourceVertex::new(points[1], color, vec2(1.0, 0.0), normal, None, None),
+        SourceVertex::new(points[2], color, vec2(1.0, 1.0), normal, None, None),
+        SourceVertex::new(points[3], color, vec2(0.0, 1.0), normal, None, None),
     ];
 
     let indices = vec![0, 1, 2, 2, 3, 0];
@@ -279,24 +280,32 @@ pub fn build_cube_source(points: [Vec3; 8], color: Vec3) -> SourceMesh {
             color,
             vec2(0.0, 0.0),
             normal,
+            None,
+            None,
         ));
         vertices.push(SourceVertex::new(
             points[face[1]],
             color,
             vec2(1.0, 0.0),
             normal,
+            None,
+            None,
         ));
         vertices.push(SourceVertex::new(
             points[face[2]],
             color,
             vec2(1.0, 1.0),
             normal,
+            None,
+            None,
         ));
         vertices.push(SourceVertex::new(
             points[face[3]],
             color,
             vec2(0.0, 1.0),
             normal,
+            None,
+            None,
         ));
 
         indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
@@ -319,6 +328,8 @@ pub fn build_circle_source(radius: f32, segments: u32, color: Vec3) -> SourceMes
         color,
         vec2(0.5, 0.5),
         normal,
+        None,
+        None,
     ));
 
     for i in 0..segments {
@@ -333,6 +344,8 @@ pub fn build_circle_source(radius: f32, segments: u32, color: Vec3) -> SourceMes
             color,
             vec2(u, v),
             normal,
+            None,
+            None,
         ));
     }
 
@@ -391,7 +404,7 @@ fn build_polygon_source(points: Vec<Vec3>, color: Vec3) -> SourceMesh {
             0.0
         };
 
-        vertices.push(SourceVertex::new(*p, color, vec2(u, v), normal));
+        vertices.push(SourceVertex::new(*p, color, vec2(u, v), normal, None, None));
     }
 
     indices.extend(triangulate_polygon_yz(&points));
@@ -530,7 +543,7 @@ fn build_sphere_source(radius: f32, rings: u32, segments: u32, color: Vec3) -> S
             let position = vec3(x, y, z);
             let normal = normalized_or(position, vec3(0.0, 1.0, 0.0));
 
-            vertices.push(SourceVertex::new(position, color, vec2(u, v), normal));
+            vertices.push(SourceVertex::new(position, color, vec2(u, v), normal, None, None));
         }
     }
 
@@ -559,8 +572,8 @@ fn build_sphere_source(radius: f32, rings: u32, segments: u32, color: Vec3) -> S
 fn build_line_source(pos0: Vec3, pos1: Vec3, color: Vec3) -> SourceMesh {
     let normal = vec3(1.0, 0.0, 0.0);
     let vertices = vec![
-        SourceVertex::new(pos0, color, vec2(0.0, 0.0), normal),
-        SourceVertex::new(pos1, color, vec2(1.0, 1.0), normal),
+        SourceVertex::new(pos0, color, vec2(0.0, 0.0), normal, None, None),
+        SourceVertex::new(pos1, color, vec2(1.0, 1.0), normal, None, None),
     ];
 
     let indices = vec![0, 1];
@@ -912,6 +925,7 @@ pub unsafe fn update_primitive_mesh(
         .ok_or_else(|| anyhow!("mesh handle not found"))?;
 
     match mesh.vertex_layout {
+        VertexLayout::SkinnedVertex => Err(anyhow!("Skinned primitives are not supported yet")),
         VertexLayout::Mesh3D => renderer.update_mesh_from_data(
             mesh_handle,
             source.to_mesh3d_data(),

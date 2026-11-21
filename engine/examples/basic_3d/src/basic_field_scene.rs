@@ -15,14 +15,15 @@ impl Scene for BasicFieldScene {
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         crate::system::FpsSystem::install(context)?;
+        context.set_msaa(Msaa::X1);
         self.scene_id=context.scene_id();
         context.set_skybox("default")?;
         self.create_camera(context)?;
         self.create_fundation(context)?;
+        self.create_models(context)?;
         self.create_texts(context)?;
 
         self.add_update_systems(context);
-        self.add_thread_profiler(context);
         self.bind_input_commands(context);
         Ok(())
     }
@@ -60,6 +61,48 @@ impl BasicFieldScene {
             Ok(())
         }
     }
+    fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        let teacup=context.spawn_gltf_model(
+            "teacup",
+            Transform { 
+                position: vec3(0.0,-5.0,0.0),
+                rotation: vec3(45.0,0.0,0.0), 
+                scale: vec3(2.0,2.0,2.0)
+            },
+            None,
+        );
+
+        let refrigerator = context.spawn_gltf_model(
+            "refrigerator",
+            Transform{
+                position: vec3(0.0,-3.0,0.0),
+                rotation: vec3(90.0,90.0,0.0),
+                scale: vec3(1.0,1.0,1.0),
+            },
+            None,
+        );
+        
+        let car=context.spawn_gltf_model(
+            "car",
+            Transform{
+                position: vec3(0.0, 0.0,0.0),
+                rotation: vec3(90.0,0.0,0.0),
+                ..Default::default()
+            },
+            None,
+        );
+
+        let helmet=context.spawn_gltf_model(
+            "helmet",
+            Transform{
+                position: vec3(0.0,5.0,0.0),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
+    }
+
     fn add_update_systems(&mut self, context: &mut SceneContext<'_>) {
         context.add_update_system("camera", CameraSystem);
     }
@@ -92,17 +135,6 @@ impl BasicFieldScene {
             0.5,
         );
 
-        let ya=context.spawn_text_ui2d(
-            "jpn_font",
-            "やあ",
-            100.0,
-            100.0,
-            vec2(0.5,0.5),
-            vec2(1.0,2.0),
-            45.0,
-            vec3(1.0,0.0,1.0),
-            1.0,
-        );
         Ok(())
     }
 

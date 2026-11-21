@@ -37,6 +37,7 @@ pub struct ModelMesh{
 pub struct ModelPrimitive{
     pub positions: Vec<[f32; 3]>,
     pub normal: Option<Vec<[f32; 3]>>,
+    pub tangents: Option<Vec<[f32;4]>>,
     /// JOINTS_0: indices into ModelSkin.joints, not node indices.
     pub joints: Option<Vec<[u16; 4]>>,
     /// WEIGHTS_0: four influences per vertex; present together with joints.

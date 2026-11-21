@@ -120,7 +120,7 @@ unsafe fn create_pbr3d_variant(
     let frag_push_constant_range = vk::PushConstantRange::builder()
         .stage_flags(vk::ShaderStageFlags::FRAGMENT)
         .offset(64)
-        .size(48);
+        .size(64);
 
     // Layout
     let set_layouts = &[

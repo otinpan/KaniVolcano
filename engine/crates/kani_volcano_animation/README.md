@@ -57,3 +57,15 @@
 | 3 | テクスチャ自動解放 | 資産の所有・共有、Material変更、descriptorの寿命を管理 | 大 |
 | 4 | glTF, texture (color_space) 非同期ロード | CPU準備をバックグラウンド化し、既存の登録段階へ接続 | 中〜大 |
 | 5 | ノードアニメーション→スキニング | まず再生・補間、その後GPUでの頂点変形 | 大 |
+
+```
+// PBR material descriptors. Base-color RGB is decoded by the sRGB image format.
+// Metallic-roughness uses a linear image, with white as the absent-map fallback.
+layout(set = 1, binding = 0) uniform sampler2D baseColorSampler;
+layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessSampler;
+layout(set = 1, binding = 2) uniform sampler2D emissiveSampler;
+layout(set = 1, binding = 3) uniform sampler2D occlusionSampler;
+```
+
+* `load_gltf_model`でgltfをロードし、その中にアニメーション用の頂点データが入っているならSkinnedVertexを採用、そうでないならLit3DVertexを採用
+* PipelineKey::SkinnedPbr3D => VertexLayout::SkinnedVertexとし、専用のpipelineを作る

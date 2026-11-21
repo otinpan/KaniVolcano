@@ -1,5 +1,5 @@
 use anyhow::{ensure, Context, Result};
-use cgmath::{vec2, vec3};
+use cgmath::{vec2, vec3, InnerSpace};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -46,8 +46,45 @@ impl SourceMesh {
     }
 
     pub fn to_lit3d_data(&self) -> MeshData<Lit3DVertex> {
+        let mut vertices: Vec<_> = self.vertices.iter().map(Lit3DVertex::from).collect();
+        if matches!(self.topology, SourceTopology::TriangleList)
+            && self.vertices.iter().any(|vertex| vertex.tangent.is_none())
+        {
+            // Accumulate triangle tangents once, then orthogonalize per vertex.
+            let mut tangents = vec![vec3(0.0, 0.0, 0.0); vertices.len()];
+            let mut bitangents = tangents.clone();
+            for triangle in self.indices.chunks_exact(3) {
+                let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
+                let (Some(v0), Some(v1), Some(v2)) =
+                    (vertices.get(a), vertices.get(b), vertices.get(c)) else { continue; };
+                let e1 = v1.pos - v0.pos;
+                let e2 = v2.pos - v0.pos;
+                let uv1 = v1.tex_coord - v0.tex_coord;
+                let uv2 = v2.tex_coord - v0.tex_coord;
+                let determinant = uv1.x * uv2.y - uv1.y * uv2.x;
+                if !determinant.is_finite() || determinant.abs() < 1e-8 { continue; }
+                let tangent = (e1 * uv2.y - e2 * uv1.y) / determinant;
+                let bitangent = (e2 * uv1.x - e1 * uv2.x) / determinant;
+                for index in [a, b, c] {
+                    tangents[index] += tangent;
+                    bitangents[index] += bitangent;
+                }
+            }
+            for (i, vertex) in vertices.iter_mut().enumerate() {
+                if self.vertices[i].tangent.is_some() { continue; }
+                let normal_length = vertex.normal.magnitude2();
+                if !normal_length.is_finite() || normal_length < 1e-12 { continue; }
+                let normal = vertex.normal / normal_length.sqrt();
+                let tangent = tangents[i] - normal * normal.dot(tangents[i]);
+                let length = tangent.magnitude2();
+                if !length.is_finite() || length < 1e-12 { continue; }
+                let tangent = tangent / length.sqrt();
+                let sign = if normal.cross(tangent).dot(bitangents[i]) < 0.0 { -1.0 } else { 1.0 };
+                vertex.tangent = [tangent.x, tangent.y, tangent.z, sign];
+            }
+        }
         MeshData {
-            vertices: self.vertices.iter().map(Lit3DVertex::from).collect(),
+            vertices,
             indices: self.indices.clone(),
         }
     }
@@ -111,6 +148,9 @@ pub fn gltf_primitive_to_source(primitive: &ModelPrimitive) -> Result<SourceMesh
     if let Some(uvs) = &primitive.tex_coord {
         ensure!(uvs.len() == vertex_count, "UV count must match position count");
     }
+    if let Some(tangents) = &primitive.tangents {
+        ensure!(tangents.len() == vertex_count, "Tangent count must match position count");
+    }
 
     let indices = match &primitive.indices {
         Some(indices) => indices.clone(),
@@ -137,6 +177,8 @@ pub fn gltf_primitive_to_source(primitive: &ModelPrimitive) -> Result<SourceMesh
             normal: vec3(normal[0], normal[1], normal[2]),
             tex_coord: vec2(uv[0], uv[1]),
             color: vec3(1.0, 1.0, 1.0),
+            tangent: primitive.tangents.as_ref().map(|tangents| tangents[i]),
+            skin: None,
         }
     }).collect();
 
@@ -202,6 +244,8 @@ pub fn load_model_source(file_path: &str) -> Result<SourceMesh> {
                 color: vec3(1.0, 1.0, 1.0),
                 tex_coord,
                 normal,
+                tangent: None,
+                skin: None,
             };
 
             if let Some(index) = unique_vertices.get(&vertex) {
@@ -230,6 +274,27 @@ mod tests {
     use cgmath::{vec2, vec3};
 
     #[test]
+    fn lit3d_generates_tangents_and_preserves_supplied_values() {
+        let mut source = SourceMesh {
+            vertices: vec![
+                SourceVertex::new(vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0), vec2(0.0, 0.0), vec3(0.0, 0.0, 1.0), None, None),
+                SourceVertex::new(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0), vec2(1.0, 0.0), vec3(0.0, 0.0, 1.0), None, None),
+                SourceVertex::new(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 1.0), vec2(0.0, 1.0), vec3(0.0, 0.0, 1.0), None, None),
+            ],
+            indices: vec![0, 1, 2],
+            topology: TriangleList,
+        };
+        assert!(source.to_lit3d_data().vertices.iter().all(|v| v.tangent == [1.0, 0.0, 0.0, 1.0]));
+        source.vertices[1].tex_coord.x = -1.0;
+        assert!(source.to_lit3d_data().vertices.iter().all(|v| v.tangent == [-1.0, 0.0, 0.0, -1.0]));
+        for vertex in &mut source.vertices { vertex.tex_coord = vec2(0.0, 0.0); }
+        source.vertices[0].tangent = Some([0.0, 1.0, 0.0, -1.0]);
+        let data = source.to_lit3d_data();
+        assert_eq!(data.vertices[0].tangent, [0.0, 1.0, 0.0, -1.0]);
+        assert_eq!(data.vertices[1].tangent, [0.0; 4]);
+    }
+
+    #[test]
     fn to_debugline_data_converts_triangle_indices_to_line_indices() {
         let source = SourceMesh {
             vertices: vec![
@@ -238,18 +303,24 @@ mod tests {
                     vec3(1.0, 1.0, 1.0),
                     vec2(0.0, 0.0),
                     vec3(0.0, 0.0, 1.0),
-                ),
+                    None,
+                    None,
+              ),
                 SourceVertex::new(
                     vec3(1.0, 0.0, 0.0),
                     vec3(1.0, 1.0, 1.0),
                     vec2(1.0, 0.0),
                     vec3(0.0, 0.0, 1.0),
+                    None,
+                    None,
                 ),
                 SourceVertex::new(
                     vec3(0.0, 1.0, 0.0),
                     vec3(1.0, 1.0, 1.0),
                     vec2(0.0, 1.0),
                     vec3(0.0, 0.0, 1.0),
+                    None,
+                    None,
                 ),
             ],
             indices: vec![0, 1, 2],

@@ -10,6 +10,7 @@ layout(set = 1, binding = 0) uniform sampler2D baseColorSampler;
 layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessSampler;
 layout(set = 1, binding = 2) uniform sampler2D emissiveSampler;
 layout(set = 1, binding = 3) uniform sampler2D occlusionSampler;
+layout(set = 1, binding = 4) uniform sampler2D normalSampler;
 
 // Pbr3D requires this additional fragment-visible camera UBO (16 bytes).
 // set 0, binding 0 remains the vertex shader's view/projection UBO.
@@ -33,20 +34,21 @@ layout(std140, set = 2, binding = 0) uniform LightUniform {
 } light;
 
 // Vertex model matrix occupies bytes 0..63.
-// Pbr3D must upload 48 fragment bytes at offset 64; total range is 112 bytes.
-// Colors are linear. Base-color, metallic-roughness and emissive textures are supported;
-// other texture maps, alpha modes and IBL are not implemented yet.
+// Pbr3D uploads 64 fragment bytes at offset 64; total range is 128 bytes.
+// Colors are linear. Alpha masking and IBL are not implemented yet.
 layout(push_constant) uniform PbrMaterialPushConstants {
   layout(offset = 64) vec4 baseColor;
   // x = metallic, y = roughness, z = use base-color texture (0/1), w = occlusion strength
   layout(offset = 80) vec4 materialParams;
   layout(offset = 96) vec4 emissive; // rgb = color, a = strength
+  layout(offset = 112) vec4 normalParams; // x = scale, y = use normal texture (0/1)
 } pcs;
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragNormal;
 layout(location = 3) in vec3 fragWorldPos;
+layout(location = 4) in vec4 fragTangent;
 layout(location = 0) out vec4 outColor;
 
 vec3 safeNormalize(vec3 value) {
@@ -98,6 +100,18 @@ float rangeAttenuation(float distanceToLight, float radius) {
 
 void main() {
   vec3 N = safeNormalize(fragNormal);
+  if (pcs.normalParams.y > 0.5) {
+    // Sample before the varying-dependent validity check to preserve UV derivatives.
+    vec3 mappedNormal = texture(normalSampler, fragTexCoord).rgb * 2.0 - 1.0;
+    mappedNormal.xy *= pcs.normalParams.x;
+    vec3 T = fragTangent.xyz - N * dot(N, fragTangent.xyz);
+    if (dot(T, T) > 1e-12 && abs(fragTangent.w) > 0.5
+        && dot(mappedNormal, mappedNormal) > 1e-12) {
+      T = safeNormalize(T);
+      vec3 B = cross(N, T) * sign(fragTangent.w);
+      N = safeNormalize(mat3(T, B, N) * safeNormalize(mappedNormal));
+    }
+  }
   vec3 V = safeNormalize(camera.worldPosition.xyz - fragWorldPos);
   vec4 base = pcs.baseColor;
   if (pcs.materialParams.z > 0.5) {

@@ -132,6 +132,7 @@ fn parse_primitive(
             .context("Missing or unreadable POSITION")?
             .collect(),
         normal: reader.read_normals().map(|values| values.collect()),
+        tangents: reader.read_tangents().map(|values| values.collect()),
         joints,
         weights,
         tex_coord: reader

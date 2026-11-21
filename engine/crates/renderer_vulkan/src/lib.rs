@@ -75,7 +75,9 @@ use self::uniform::{
     update_light_uniform_buffer, update_uniform_buffer,
     create_pbr_camera_uniform_buffers, update_pbr_camera_uniform_buffer,
 };
-pub use self::vertex::{DebugLineVertex, Lit3DVertex, Mesh3DVertex, SourceVertex, VertexLayout};
+pub use self::vertex::{
+    DebugLineVertex, Lit3DVertex, Mesh3DVertex, SourceVertex, VertexLayout, SkinInfluence,
+};
 use self::text::{GpuGlyphAtlas};
 pub use self::text::{GpuTextBatch, GpuTextMesh};
 
