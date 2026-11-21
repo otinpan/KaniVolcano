@@ -69,13 +69,15 @@ pub struct GltfModelAsset{
     pub source: GltfModel,
     pub meshes: Vec<Vec<MeshAssetId>>,
     pub materials: Vec<Material>,
-    pub textures: Vec<TextureHandle>, 
+    pub textures: Vec<GltfTextureHandle>, 
     pub ref_count: usize,
     pub auto_release: bool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GltfModelAssetId(pub usize);
+
+pub use renderer_vulkan::GltfTextureHandle;
 
 
 pub struct Resources {
@@ -226,7 +228,7 @@ impl Resources {
         gltf_model: GltfModel,
         meshes: Vec<Vec<MeshAssetId>>,
         materials: Vec<Material>,
-        textures: Vec<TextureHandle>,
+        textures: Vec<GltfTextureHandle>,
         auto_release: bool,
     ) -> Result<GltfModelAssetId>{
         // One ownership reference per distinct mesh, even when several
@@ -295,7 +297,7 @@ impl Resources {
         gltf_model: GltfModel,
         mesh_handles: Vec<Vec<MeshHandle>>,
         materials: Vec<Material>,
-        textures: Vec<TextureHandle>,
+        textures: Vec<GltfTextureHandle>,
         auto_release: bool,
     ) -> Result<GltfModelAssetId>{
         let name = name.into();
@@ -762,7 +764,11 @@ mod tests {
     fn model_keeps_mesh_alive_after_last_entity_and_allows_respawn() {
         let mut resources = Resources::default();
         let materials = vec![Material { metallic: 0.25, ..Material::default() }];
-        let textures = vec![TextureHandle(7), TextureHandle(8), TextureHandle(7)];
+        let textures = vec![
+            GltfTextureHandle { srgb: Some(TextureHandle(7)), linear: None },
+            GltfTextureHandle { srgb: None, linear: Some(TextureHandle(8)) },
+            GltfTextureHandle { srgb: Some(TextureHandle(7)), linear: None },
+        ];
         let model = resources.register_gltf_model("character", empty_gltf_model(),
             vec![vec![mesh_handle(3)]], materials.clone(), textures.clone(), true).unwrap();
         assert_eq!(resources.gltf_model_assets[model.0].as_ref().unwrap().materials, materials);

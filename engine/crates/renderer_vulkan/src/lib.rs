@@ -64,7 +64,7 @@ use self::sync::{create_render_finished_semaphores, create_sync_objects};
 use self::types::{Mesh, RenderSkybox, VulkanData};
 pub use self::types::{
     MeshHandle, PipelineKey, RenderCamera, RenderItem, RenderMaterial, RenderAlphaMode, SkyboxTextureHandle, TextureHandle,
-    TextRenderItem,
+    TextRenderItem, TextureColorSpace, GltfTextureHandle,
 };
 use self::uniform::{
     create_descriptor_pool, create_global_descriptor_set_layout, create_global_descriptor_sets,
@@ -135,6 +135,7 @@ impl Msaa {
         }
     }
 }
+
 
 impl VulkanRenderer {
     pub unsafe fn create(window: &Window) -> Result<Self> {
@@ -374,7 +375,16 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn load_texture(&mut self, path: &str) -> Result<TextureHandle> {
-        self.upload_decoded_texture(&decode_texture(path)?)
+        self.load_texture_with_color_space(path, TextureColorSpace::Srgb)
+    }
+
+    pub unsafe fn load_texture_with_color_space(
+        &mut self,
+        path: &str,
+        color_space: TextureColorSpace,
+    ) -> Result<TextureHandle> {
+        let decoded = decode_texture(path)?;
+        self.upload_decoded_texture_with_color_space(&decoded, color_space)
     }
 
     // create gpu texture from pixels and register it to vulkan_renderer
@@ -383,31 +393,46 @@ impl VulkanRenderer {
         Ok(handles[0])
     }
 
-    /// Uploads sRGB glTF textures using the shared linear/repeat sampler.
+    /// Uploads required sRGB/linear variants using the shared linear/repeat sampler.
     /// Returned handles are indexed by glTF texture index, not image index.
-    /// Textures sharing an image share a handle. Linear material maps are rejected.
+    /// Textures sharing an image and color space share a handle.
     pub unsafe fn load_textures_from_gltf(
         &mut self,
         images: &[ModelImage],
         textures: &[ModelTexture],
         materials: &[ModelMaterial],
-    ) -> Result<Vec<TextureHandle>>{
-        let decoded = image::prepare_gltf_textures(images, textures, materials)?;
-        let (image_indices, decoded): (Vec<_>, Vec<_>) = decoded.into_iter().unzip();
-        let uploaded = self.upload_decoded_textures(&decoded)?;
-        let handles: std::collections::HashMap<_, _> =
-            image_indices.into_iter().zip(uploaded).collect();
-        Ok(textures.iter().map(|texture| handles[&texture.image]).collect())
+    ) -> Result<Vec<GltfTextureHandle>>{
+        let prepared = image::prepare_gltf_textures(images, textures, materials)?;
+        let requests: Vec<_> = prepared.uploads.iter()
+            .map(|&(image, color_space)| (&prepared.images[&image], color_space))
+            .collect();
+        let uploaded = self.upload_decoded_textures_with_color_space(&requests)?;
+        Ok(prepared.textures.iter().map(|indices| GltfTextureHandle {
+            srgb: indices[0].map(|index| uploaded[index]),
+            linear: indices[1].map(|index| uploaded[index]),
+        }).collect())
     }
 
-    /// Uploads RGBA8 sRGB images in input order, refreshing descriptors once.
-    /// Validates the entire batch before allocating GPU resources.
-    /// An empty batch performs no GPU work.
+    /// Uploads RGBA8 sRGB images using the shared batch upload path.
     pub unsafe fn upload_decoded_textures(
         &mut self,
         images: &[DecodedTexture],
     ) -> Result<Vec<TextureHandle>> {
-        for image in images {
+        let requests: Vec<_> = images.iter()
+            .map(|image| (image, TextureColorSpace::Srgb))
+            .collect();
+        self.upload_decoded_textures_with_color_space(&requests)
+    }
+
+    /// Uploads RGBA8 images with per-image color spaces in input order,
+    /// refreshing descriptors once.
+    /// Validates the entire batch before allocating GPU resources.
+    /// An empty batch performs no GPU work.
+    pub unsafe fn upload_decoded_textures_with_color_space(
+        &mut self,
+        images: &[(&DecodedTexture, TextureColorSpace)],
+    ) -> Result<Vec<TextureHandle>> {
+        for &(image, _) in images {
             validate_decoded_texture(image, 1)?;
         }
         if images.is_empty() {
@@ -416,10 +441,10 @@ impl VulkanRenderer {
         // Create all images before exposing handles or rebuilding descriptors.
         let mut created = Vec::with_capacity(images.len());
         let first = self.data.textures.len();
-        for decoded in images {
-            let result = image::create_texture_from_pixels(
+        for &(decoded, color_space) in images {
+            let result = image::create_texture_from_pixels_with_color_space(
                 &self.instance, &self.device, &mut self.data,
-                &decoded.pixels, decoded.width, decoded.height,
+                &decoded.pixels, decoded.width, decoded.height, color_space,
             );
             match result {
                 Ok(texture) => {
@@ -452,6 +477,15 @@ impl VulkanRenderer {
             return Err(error);
         }
         Ok((first..self.data.textures.len()).map(TextureHandle).collect())
+    }
+
+    pub unsafe fn upload_decoded_texture_with_color_space(
+        &mut self,
+        decoded: &DecodedTexture,
+        color_space: TextureColorSpace,
+    ) -> Result<TextureHandle> {
+        let handles = self.upload_decoded_textures_with_color_space(&[(decoded, color_space)])?;
+        Ok(handles[0])
     }
 
     unsafe fn refresh_texture_descriptors(&mut self) -> Result<()> {

@@ -65,10 +65,17 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
     )?;
 
     app.load_gltf_model(
+        "teacup",
+        "assets/models/teacup.glb",
+        true,
+    )?;
+
+    app.load_gltf_model(
         "refrigerator",
         "assets/models/refrigerator.glb",
         true,
     )?;
+
     /*app.load_model(
         "viking_room_lit3d",
         "assets/models/viking_room.obj",
@@ -86,7 +93,7 @@ unsafe fn load_fonts(app: &mut App) -> Result<()>{
 
 unsafe fn load_textures(app: &mut App) -> Result<()> {
     app.load_texture("viking_room", "assets/textures/viking_room.png")?;
-    app.load_texture("face", "assets/textures/texture.png")?;
+    app.load_texture_with_color_space("face", "assets/textures/texture.png", TextureColorSpace::Linear)?;
     app.load_texture("ghost", "assets/textures/ghost.png")?;
     app.load_texture("escapee", "assets/textures/escapee.png")?;
 

@@ -49,10 +49,11 @@
 * テクスチャの個別解放
 
 
-| 順序 | 機能 | 主な変更範囲 | 重さの目安 |
+
+| 優先 | 機能 | 現在からの進め方 | 残りの重さ |
 |---|---|---|---|
-| 1 | linear形式で画像のロード | GPU画像作成、glTFテクスチャロード、Material変換、descriptor | 中 |
-| 2 | ロード失敗時のGPU資産回収 | ロード処理、rendererの作成・破棄 | 中 |
-| 3 | テクスチャ自動解放 | Resources、Material、参照管理、descriptor | 大 |
-| 4 | glTF非同期ロード | 既存のAssetLoadSystem、要求・結果の型、GPU登録処理 | 中〜大 |
-| 5 | ノードアニメーション→スキニング | Component、system、補間、GPU頂点・シェーダー | 大 |
+| 1 | PBRテクスチャの描画反映 | 専用descriptorを整備し、metallic-roughness → emissive・occlusion → normalの順に接続 | 中〜大 |
+| 2 | ロード失敗時のGPU資産回収 | 工程をまたぐ失敗と、GPU作成途中の失敗を回収 | 中 |
+| 3 | テクスチャ自動解放 | 資産の所有・共有、Material変更、descriptorの寿命を管理 | 大 |
+| 4 | glTF, texture (color_space) 非同期ロード | CPU準備をバックグラウンド化し、既存の登録段階へ接続 | 中〜大 |
+| 5 | ノードアニメーション→スキニング | まず再生・補間、その後GPUでの頂点変形 | 大 |

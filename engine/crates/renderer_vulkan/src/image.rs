@@ -6,7 +6,7 @@ use vulkanalia::prelude::v1_0::*;
 use super::Device;
 use super::Instance;
 use super::buffer::{begin_single_time_commands, create_buffer, end_single_time_commands};
-use super::types::{Texture, VulkanData};
+use super::types::{Texture, TextureColorSpace, VulkanData};
 
 // texture //////////////////////////////////////////
 #[cfg(test)]
@@ -43,23 +43,44 @@ mod gltf_texture_tests {
     fn deduplicates_images_and_validates_indices_and_samplers() {
         let images = [rgb_image()];
         let mut textures = [ModelTexture::default(), ModelTexture::default()];
-        assert_eq!(prepare_gltf_textures(&images, &textures, &[]).unwrap().len(), 1);
+        let mut material = ModelMaterial::default();
+        material.base_color_texture = Some(Default::default());
+        material.emissive_texture = Some(Default::default());
+        material.emissive_texture.as_mut().unwrap().texture = 1;
+        material.normal_texture = Some(Default::default());
+        let materials = [material];
+        let prepared = prepare_gltf_textures(&images, &textures, &materials).unwrap();
+        assert_eq!(prepared.images.len(), 1);
+        assert_eq!(prepared.uploads, vec![(0, TextureColorSpace::Srgb), (0, TextureColorSpace::Linear)]);
+        assert_eq!(prepared.textures, vec![[Some(0), Some(1)], [Some(0), None]]);
         textures[1].image = 1;
-        assert!(prepare_gltf_textures(&images, &textures, &[]).is_err());
+        assert!(prepare_gltf_textures(&images, &textures, &materials).is_err());
         textures[1].image = 0;
         textures[1].sampler.wrap_s = WrappingMode::ClampToEdge;
-        assert!(prepare_gltf_textures(&images, &textures, &[]).is_err());
+        assert!(prepare_gltf_textures(&images, &textures, &materials).is_err());
     }
 
     #[test]
-    fn rejects_linear_maps_and_unsupported_uv_sets_before_upload() {
+    fn supports_linear_maps_and_rejects_invalid_references_before_upload() {
         let mut material = ModelMaterial::default();
         material.normal_texture = Some(Default::default());
-        assert!(prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[material]).is_err());
+        let prepared = prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[material]).unwrap();
+        assert_eq!(prepared.textures, vec![[None, Some(0)]]);
         let mut material = ModelMaterial::default();
         material.base_color_texture = Some(Default::default());
         material.base_color_texture.as_mut().unwrap().tex_coord = 1;
         assert!(prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[material]).is_err());
+    }
+
+    #[test]
+    fn unused_textures_require_no_uploads() {
+        let prepared = prepare_gltf_textures(&[rgb_image()], &[ModelTexture::default()], &[]).unwrap();
+        assert!(prepared.images.is_empty());
+        assert!(prepared.uploads.is_empty());
+        assert_eq!(prepared.textures, vec![[None, None]]);
+        let mut material = ModelMaterial::default();
+        material.occlusion_texture = Some(Default::default());
+        assert!(prepare_gltf_textures(&[], &[], &[material]).is_err());
     }
 }
 
@@ -100,27 +121,43 @@ pub fn decode_gltf_image(image: &kani_volcano_animation::ModelImage) -> Result<D
     Ok(DecodedTexture { pixels, width: image.width, height: image.height })
 }
 
-/// Validates the current sRGB-only glTF texture path before allocating GPU resources.
+pub(crate) struct PreparedGltfTextures {
+    pub images: std::collections::HashMap<usize, DecodedTexture>, // decoded images
+    pub uploads: Vec<(usize, TextureColorSpace)>, // image index and color space
+    // Per texture: [sRGB upload index, linear upload index].
+    pub textures: Vec<[Option<usize>; 2]>,
+}
+
+/// Prepares image data and upload mappings without allocating GPU resources.
 pub(crate) fn prepare_gltf_textures(
     images: &[kani_volcano_animation::ModelImage],
     textures: &[kani_volcano_animation::ModelTexture],
     materials: &[kani_volcano_animation::ModelMaterial],
-) -> Result<Vec<(usize, DecodedTexture)>> {
+) -> Result<PreparedGltfTextures> {
     use kani_volcano_animation::{MagFilter, MinFilter, WrappingMode};
+    use std::collections::HashMap;
+    let mut required = vec![[false; 2]; textures.len()];
     for material in materials {
-        anyhow::ensure!(
-            material.normal_texture.is_none() && material.metallic_roughness_texture.is_none()
-                && material.occlusion_texture.is_none(),
-            "Linear glTF textures are not supported by the sRGB upload path yet"
-        );
-        for reference in [&material.base_color_texture, &material.emissive_texture].into_iter().flatten() {
-            anyhow::ensure!(reference.texture < textures.len(), "Invalid glTF texture index");
-            anyhow::ensure!(reference.tex_coord == 0, "Only TEXCOORD_0 is supported");
+        for (reference, slot) in [
+            (&material.base_color_texture, 0), (&material.emissive_texture, 0),
+            (&material.normal_texture, 1), (&material.metallic_roughness_texture, 1),
+            (&material.occlusion_texture, 1),
+        ] {
+            if let Some(reference) = reference {
+                anyhow::ensure!(reference.tex_coord == 0, "Only TEXCOORD_0 is supported");
+                let usage = required.get_mut(reference.texture)
+                    .ok_or_else(|| anyhow!("Invalid glTF texture index"))?;
+                usage[slot] = true;
+            }
         }
     }
-    let mut decoded = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for texture in textures {
+    let mut prepared = PreparedGltfTextures {
+        images: HashMap::new(), uploads: Vec::new(),
+        textures: vec![[None; 2]; textures.len()],
+    };
+    let mut upload_indices = HashMap::new();
+    for (index, texture) in textures.iter().enumerate() {
+        if !required[index].iter().any(|&used| used) { continue; }
         let sampler = &texture.sampler;
         anyhow::ensure!(
             matches!(sampler.mag_filter, None | Some(MagFilter::Linear))
@@ -129,12 +166,22 @@ pub(crate) fn prepare_gltf_textures(
                 && sampler.wrap_t == WrappingMode::Repeat,
             "glTF sampler requires unsupported filtering or wrapping"
         );
-        let image = images.get(texture.image).ok_or_else(|| anyhow!("Invalid glTF image index"))?;
-        if seen.insert(texture.image) {
-            decoded.push((texture.image, decode_gltf_image(image)?));
+        let source = images.get(texture.image).ok_or_else(|| anyhow!("Invalid glTF image index"))?;
+        if let std::collections::hash_map::Entry::Vacant(entry) = prepared.images.entry(texture.image) {
+            entry.insert(decode_gltf_image(source)?);
+        }
+        for (slot, color_space) in [TextureColorSpace::Srgb, TextureColorSpace::Linear].into_iter().enumerate() {
+            if required[index][slot] {
+                let key = (texture.image, color_space);
+                let upload = *upload_indices.entry(key).or_insert_with(|| {
+                    prepared.uploads.push(key);
+                    prepared.uploads.len() - 1
+                });
+                prepared.textures[index][slot] = Some(upload);
+            }
         }
     }
-    Ok(decoded)
+    Ok(prepared)
 }
 
 pub unsafe fn create_texture(
@@ -275,6 +322,7 @@ pub unsafe fn create_black_skybox_texture(
 }
 
 // texture image ///////////////////////////////////////////////
+/// Preserves the existing sRGB upload behavior.
 pub unsafe fn create_texture_from_pixels(
     instance: &Instance,
     device: &Device,
@@ -283,6 +331,24 @@ pub unsafe fn create_texture_from_pixels(
     width: u32,
     height: u32,
 ) -> Result<Texture> {
+    create_texture_from_pixels_with_color_space(
+        instance, device, data, pixels, width, height, TextureColorSpace::Srgb,
+    )
+}
+
+pub unsafe fn create_texture_from_pixels_with_color_space(
+    instance: &Instance,
+    device: &Device,
+    data: &mut VulkanData,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+    color_space: TextureColorSpace,
+) -> Result<Texture> {
+    let format = match color_space {
+        TextureColorSpace::Srgb => vk::Format::R8G8B8A8_SRGB,
+        TextureColorSpace::Linear => vk::Format::R8G8B8A8_UNORM,
+    };
     let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
     let size = u64::try_from(pixels.len())?;
     let (staging_buffer, staging_buffer_memory) = create_buffer(
@@ -306,7 +372,7 @@ pub unsafe fn create_texture_from_pixels(
         height,
         mip_levels,
         vk::SampleCountFlags::_1,
-        vk::Format::R8G8B8A8_SRGB,
+        format,
         vk::ImageTiling::OPTIMAL,
         vk::ImageUsageFlags::SAMPLED
             | vk::ImageUsageFlags::TRANSFER_DST
@@ -318,7 +384,7 @@ pub unsafe fn create_texture_from_pixels(
         device,
         data,
         image,
-        vk::Format::R8G8B8A8_SRGB,
+        format,
         vk::ImageLayout::UNDEFINED,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         mip_levels,
@@ -334,7 +400,7 @@ pub unsafe fn create_texture_from_pixels(
         device,
         data,
         image,
-        vk::Format::R8G8B8A8_SRGB,
+        format,
         width,
         height,
         mip_levels,
@@ -343,7 +409,7 @@ pub unsafe fn create_texture_from_pixels(
     let image_view = create_image_view(
         device,
         image,
-        vk::Format::R8G8B8A8_SRGB,
+        format,
         vk::ImageAspectFlags::COLOR,
         mip_levels,
     )?;

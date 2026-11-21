@@ -22,7 +22,9 @@ impl Scene for Basic3dScene {
     }
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        crate::system::FpsSystem::install(context)?;
         context.set_skybox("ghost")?;
+        context.set_msaa(Msaa::X1);
         self.create_models(context)?;
         self.create_primitives(context)?;
         self.create_texts(context)?;
@@ -488,11 +490,21 @@ impl Basic3dScene {
             },
         );
 
-        let refrigerator=context.spawn_gltf_model(
-            "refrigerator",
+        let teacup=context.spawn_gltf_model(
+            "teacup",
             Transform { 
                 position: vec3(-2.0,0.0,-1.0),
                 rotation: vec3(45.0,0.0,0.0), 
+                ..Default::default()
+            },
+            None,
+        );
+
+        let refrigerator = context.spawn_gltf_model(
+            "refrigerator",
+            Transform{
+                position: vec3(-3.0,2.0,1.0),
+                scale: vec3(2.0,2.0,2.0),
                 ..Default::default()
             },
             None,

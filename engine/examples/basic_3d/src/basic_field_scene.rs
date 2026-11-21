@@ -14,6 +14,7 @@ impl Scene for BasicFieldScene {
     }
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        crate::system::FpsSystem::install(context)?;
         self.scene_id=context.scene_id();
         context.set_skybox("default")?;
         self.create_camera(context)?;

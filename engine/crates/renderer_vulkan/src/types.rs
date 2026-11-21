@@ -120,6 +120,13 @@ pub struct Texture {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TextureHandle(pub usize);
 
+/// GPU variants of one glTF texture. Unused color spaces remain None.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GltfTextureHandle {
+    pub srgb: Option<TextureHandle>,
+    pub linear: Option<TextureHandle>,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SkyboxTextureHandle(pub usize);
 
@@ -150,6 +157,13 @@ impl PipelineKey {
             PipelineKey::Text3D => VertexLayout::Ui2D,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TextureColorSpace{
+    #[default]
+    Srgb, // use converted pixels number, which are converted when sampling
+    Linear, // use pixels number directly
 }
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq)]

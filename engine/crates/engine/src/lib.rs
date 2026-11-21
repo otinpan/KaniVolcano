@@ -30,11 +30,11 @@ pub use component::{
 pub use ecs::{ComponentPool, EntityId, Registry};
 pub use input::Input;
 pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
-pub use renderer_vulkan::{Msaa, PipelineKey, VertexLayout};
+pub use renderer_vulkan::{Msaa, PipelineKey, TextureColorSpace, VertexLayout};
 pub use resources::{
     MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
     AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource,
-    AudioPlaybackId, AudioPlaybackResource, GltfModelAsset, GltfModelAssetId,
+    AudioPlaybackId, AudioPlaybackResource, GltfModelAsset, GltfModelAssetId, GltfTextureHandle,
 };
 pub use runner::{EngineConfig, run};
 pub use scene::{Scene, SceneContext};
@@ -61,12 +61,12 @@ pub mod prelude {
     pub use crate::{
         App, AssetApi, AssetLoadApi, AudioApi, JobApi, Camera, CameraSystem, Command, CommandContext, Component, EngineConfig,
         EntityApi, EntityId, InputApi, InputTrigger, Material, MeshAssetId, MeshRenderer, Name,
-        Msaa, ObjectApi, PipelineKey, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
+        Msaa, ObjectApi, PipelineKey, TextureColorSpace, PrimitiveShape, PrimitiveType, RenderCommandApi, Rotator,
         RotatorSystem, ThreadProfilerSystem, Scene, SceneCommandApi, SceneContext, SceneId, SceneOwned, Tags, TimeApi,
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
         AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle, DebugPauseCommand,
-        DrawOrder, AlphaMode, GltfModelAssetId, GltfModelRoot, ParentComponent,
+        DrawOrder, AlphaMode, GltfModelAssetId, GltfModelRoot, ParentComponent, 
     };
 
     pub use kani_volcano_math::Transform;

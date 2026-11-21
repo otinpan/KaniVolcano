@@ -1,7 +1,7 @@
 use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
-    MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
+    MeshHandle, SkyboxTextureHandle, TextureHandle, TextureColorSpace, VertexLayout, VulkanRenderer,
     Msaa, 
 };
 use kani_volcano_audio::{
@@ -24,7 +24,7 @@ use crate::primitive::{
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
     UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
-    GltfModelAssetId, Material,
+    GltfModelAssetId, Material, GltfTextureHandle,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -363,7 +363,7 @@ impl App {
         let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_meshes_from_gltf(&gltf_model.meshes)?;
 
         // load texture
-        let texture_handles: Vec<TextureHandle> = self.renderer.load_textures_from_gltf(
+        let texture_handles: Vec<GltfTextureHandle> = self.renderer.load_textures_from_gltf(
             &gltf_model.images,
             &gltf_model.textures,
             &gltf_model.materials,
@@ -378,10 +378,13 @@ impl App {
                 // The loader validates references and returns handles in glTF texture order.
                 material.base_color_texture = source.base_color_texture
                     .as_ref()
-                    .map(|reference| texture_handles[reference.texture]);
+                    .and_then(|reference| texture_handles[reference.texture].srgb);
                 material.emissive_texture = source.emissive_texture
                     .as_ref()
-                    .map(|reference| texture_handles[reference.texture]);
+                    .and_then(|reference| texture_handles[reference.texture].srgb);
+                material.metallic_roughness_texture = source.metallic_roughness_texture
+                    .as_ref()
+                    .and_then(|reference| texture_handles[reference.texture].linear);
                 material
             })
             .collect();
@@ -393,6 +396,17 @@ impl App {
 
     pub unsafe fn load_texture(&mut self, name: &str, path: &str) -> Result<TextureHandle> {
         let handle = self.renderer.load_texture(path)?;
+
+        Ok(self.resources.register_texture(name, handle))
+    }
+
+    pub unsafe fn load_texture_with_color_space(
+        &mut self,
+        name: &str,
+        path: &str,
+        color_space: TextureColorSpace,
+    ) -> Result<TextureHandle> {
+        let handle = self.renderer.load_texture_with_color_space(path, color_space)?;
 
         Ok(self.resources.register_texture(name, handle))
     }

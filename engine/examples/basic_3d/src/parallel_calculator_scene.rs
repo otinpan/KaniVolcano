@@ -24,6 +24,7 @@ impl Scene for ParallelCalculatorScene {
     }
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        crate::system::FpsSystem::install(context)?;
         self.scene_id = context.scene_id();
         self.main_cube = None;
         self.cubes_created = false;
