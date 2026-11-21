@@ -493,7 +493,7 @@ impl Basic3dScene {
         let teacup=context.spawn_gltf_model(
             "teacup",
             Transform { 
-                position: vec3(-2.0,0.0,-1.0),
+                position: vec3(-10.0,-5.0,0.0),
                 rotation: vec3(45.0,0.0,0.0), 
                 ..Default::default()
             },
@@ -503,8 +503,26 @@ impl Basic3dScene {
         let refrigerator = context.spawn_gltf_model(
             "refrigerator",
             Transform{
-                position: vec3(-3.0,2.0,1.0),
+                position: vec3(-10.0,-3.0,0.0),
+                rotation: vec3(90.0,90.0,0.0),
                 scale: vec3(2.0,2.0,2.0),
+            },
+            None,
+        );
+        
+        let car=context.spawn_gltf_model(
+            "car",
+            Transform{
+                position: vec3(-10.0, 0.0,0.0),
+                ..Default::default()
+            },
+            None,
+        );
+
+        let helmet=context.spawn_gltf_model(
+            "helmet",
+            Transform{
+                position: vec3(-10.0,5.0,0.0),
                 ..Default::default()
             },
             None,

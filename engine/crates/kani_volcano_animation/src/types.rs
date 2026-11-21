@@ -89,6 +89,7 @@ pub struct ModelMaterial{
 
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: f32,
+    pub transmission_factor: f32,
     pub double_sided: bool,
 }
 
@@ -193,6 +194,7 @@ impl Default for ModelMaterial {
             emissive_texture: None,
             alpha_mode: AlphaMode::Opaque,
             alpha_cutoff: 0.5,
+            transmission_factor: 0.0,
             double_sided: false,
         }
     }

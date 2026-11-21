@@ -181,6 +181,7 @@ fn parse_material(material: gltf::Material<'_>) -> ModelMaterial {
             gltf::material::AlphaMode::Blend => AlphaMode::Blend,
         },
         alpha_cutoff: material.alpha_cutoff().unwrap_or(0.5),
+        transmission_factor: material.transmission().map_or(0.0, |value| value.transmission_factor()),
         double_sided: material.double_sided(),
     }
 }

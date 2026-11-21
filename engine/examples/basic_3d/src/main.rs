@@ -29,7 +29,7 @@ fn main() -> Result<()> {
             app.add_scene(ParallelCalculatorScene::default())?;
             app.add_scene(MaterialScene::default())?;
 
-            app.set_current_scene("MaterialScene")?;
+            app.set_current_scene("Basic3dScene")?;
             Ok(())
         },
     )
@@ -73,6 +73,18 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
     app.load_gltf_model(
         "refrigerator",
         "assets/models/refrigerator.glb",
+        true,
+    )?;
+
+    app.load_gltf_model(
+        "helmet",
+        "assets/models/helmet.glb",
+        true,
+    )?;
+
+    app.load_gltf_model(
+        "car",
+        "assets/models/car.glb",
         true,
     )?;
 

@@ -144,6 +144,7 @@ pub unsafe fn create_lit3d_pipeline(device: &Device, data: &mut VulkanData) -> R
 
     let graphics_pipeline = GraphicsPipeline {
         key: PipelineKey::Lit3D,
+        transparent: false,
         pipeline,
         layout: pipeline_layout,
         vertex_layout: VertexLayout::Lit3D,

@@ -8,6 +8,7 @@ const int MAX_SPOT_LIGHTS = 8;
 // Metallic-roughness uses a linear image, with white as the absent-map fallback.
 layout(set = 1, binding = 0) uniform sampler2D baseColorSampler;
 layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessSampler;
+layout(set = 1, binding = 2) uniform sampler2D emissiveSampler;
 
 // Pbr3D requires this additional fragment-visible camera UBO (16 bytes).
 // set 0, binding 0 remains the vertex shader's view/projection UBO.
@@ -32,7 +33,7 @@ layout(std140, set = 2, binding = 0) uniform LightUniform {
 
 // Vertex model matrix occupies bytes 0..63.
 // Pbr3D must upload 48 fragment bytes at offset 64; total range is 112 bytes.
-// Colors are linear. Base-color and metallic-roughness textures are supported;
+// Colors are linear. Base-color, metallic-roughness and emissive textures are supported;
 // other texture maps, alpha modes and IBL are not implemented yet.
 layout(push_constant) uniform PbrMaterialPushConstants {
   layout(offset = 64) vec4 baseColor;
@@ -145,7 +146,8 @@ void main() {
   vec3 ambientFresnel = fresnelSchlick(max(dot(N, V), 0.0), f0);
   color += light.ambientColor.rgb * light.ambientColor.a
       * (vec3(1.0) - ambientFresnel) * (1.0 - metallic) * baseColor;
-  color += max(pcs.emissive.rgb, vec3(0.0)) * max(pcs.emissive.a, 0.0);
+  vec3 emissiveSample = texture(emissiveSampler, fragTexCoord).rgb;
+  color += max(pcs.emissive.rgb, vec3(0.0)) * max(pcs.emissive.a, 0.0) * emissiveSample;
 
   // Linear HDR output. Apply tone mapping in a later display pass, and sRGB
   // conversion exactly once (e.g. via an sRGB attachment). No gamma pow here.

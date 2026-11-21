@@ -143,6 +143,7 @@ pub unsafe fn create_transparent3d_pipeline(device: &Device, data: &mut VulkanDa
 
     let graphics_pipeline = GraphicsPipeline {
         key: PipelineKey::Transparent3D,
+        transparent: true,
         pipeline,
         layout: pipeline_layout,
         vertex_layout: VertexLayout::Mesh3D,

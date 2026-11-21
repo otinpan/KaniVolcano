@@ -142,6 +142,7 @@ pub unsafe fn create_text_3d_pipeline(device: &Device, data: &mut VulkanData) ->
 
     let graphics_pipeline = GraphicsPipeline {
         key: PipelineKey::Text3D,
+        transparent: true,
         pipeline,
         layout: pipeline_layout,
         vertex_layout: VertexLayout::Ui2D,

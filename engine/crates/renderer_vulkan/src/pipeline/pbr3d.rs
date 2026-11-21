@@ -6,6 +6,15 @@ use crate::types::{GraphicsPipeline, PipelineKey, VulkanData};
 use crate::vertex::{Lit3DVertex, VertexLayout};
 
 pub unsafe fn create_pbr3d_pipeline(device: &Device, data: &mut VulkanData) -> Result<()> {
+    create_pbr3d_variant(device, data, false)?;
+    create_pbr3d_variant(device, data, true)
+}
+
+unsafe fn create_pbr3d_variant(
+    device: &Device,
+    data: &mut VulkanData,
+    transparent: bool,
+) -> Result<()> {
     // Stages
     let vert = include_bytes!("../../../../shaders/compiled/pbr3d_vert.spv");
     let frag = include_bytes!("../../../../shaders/compiled/pbr3d_frag.spv");
@@ -80,7 +89,7 @@ pub unsafe fn create_pbr3d_pipeline(device: &Device, data: &mut VulkanData) -> R
     // Depth stencil state
     let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::builder()
         .depth_test_enable(true)
-        .depth_write_enable(true)
+        .depth_write_enable(!transparent)
         .depth_compare_op(vk::CompareOp::LESS)
         .depth_bounds_test_enable(false)
         .stencil_test_enable(false);
@@ -88,7 +97,7 @@ pub unsafe fn create_pbr3d_pipeline(device: &Device, data: &mut VulkanData) -> R
     // Color Blend State
     let attachment = vk::PipelineColorBlendAttachmentState::builder()
         .color_write_mask(vk::ColorComponentFlags::all())
-        .blend_enable(false)
+        .blend_enable(transparent)
         .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
         .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
         .color_blend_op(vk::BlendOp::ADD)
@@ -160,6 +169,7 @@ pub unsafe fn create_pbr3d_pipeline(device: &Device, data: &mut VulkanData) -> R
 
     let graphics_pipeline = GraphicsPipeline {
         key: PipelineKey::Pbr3D,
+        transparent,
         pipeline,
         layout: pipeline_layout,
         vertex_layout: VertexLayout::Lit3D,

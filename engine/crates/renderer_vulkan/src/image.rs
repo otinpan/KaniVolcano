@@ -40,7 +40,7 @@ mod gltf_texture_tests {
     }
 
     #[test]
-    fn deduplicates_images_and_validates_indices_and_samplers() {
+    fn deduplicates_images_validates_indices_and_falls_back_for_samplers() {
         let images = [rgb_image()];
         let mut textures = [ModelTexture::default(), ModelTexture::default()];
         let mut material = ModelMaterial::default();
@@ -57,7 +57,10 @@ mod gltf_texture_tests {
         assert!(prepare_gltf_textures(&images, &textures, &materials).is_err());
         textures[1].image = 0;
         textures[1].sampler.wrap_s = WrappingMode::ClampToEdge;
-        assert!(prepare_gltf_textures(&images, &textures, &materials).is_err());
+        textures[1].sampler.mag_filter = Some(kani_volcano_animation::MagFilter::Nearest);
+        let fallback = prepare_gltf_textures(&images, &textures, &materials).unwrap();
+        assert_eq!(fallback.uploads, prepared.uploads);
+        assert_eq!(fallback.textures, prepared.textures);
     }
 
     #[test]
@@ -80,7 +83,18 @@ mod gltf_texture_tests {
         assert_eq!(prepared.textures, vec![[None, None]]);
         let mut material = ModelMaterial::default();
         material.occlusion_texture = Some(Default::default());
-        assert!(prepare_gltf_textures(&[], &[], &[material]).is_err());
+        material.occlusion_texture.as_mut().unwrap().tex_coord = 1;
+        let prepared = prepare_gltf_textures(
+            &[rgb_image()], &[ModelTexture::default()], std::slice::from_ref(&material),
+        ).unwrap();
+        assert!(prepared.uploads.is_empty());
+        assert!(prepared.images.is_empty());
+        // The same image must still upload when used by a supported material slot.
+        material.metallic_roughness_texture = Some(Default::default());
+        let prepared = prepare_gltf_textures(
+            &[rgb_image()], &[ModelTexture::default()], &[material],
+        ).unwrap();
+        assert_eq!(prepared.textures, vec![[None, Some(0)]]);
     }
 }
 
@@ -138,10 +152,10 @@ pub(crate) fn prepare_gltf_textures(
     use std::collections::HashMap;
     let mut required = vec![[false; 2]; textures.len()];
     for material in materials {
+        // Temporarily skip occlusion until its rendering and UV1 support are implemented.
         for (reference, slot) in [
             (&material.base_color_texture, 0), (&material.emissive_texture, 0),
             (&material.normal_texture, 1), (&material.metallic_roughness_texture, 1),
-            (&material.occlusion_texture, 1),
         ] {
             if let Some(reference) = reference {
                 anyhow::ensure!(reference.tex_coord == 0, "Only TEXCOORD_0 is supported");
@@ -159,13 +173,15 @@ pub(crate) fn prepare_gltf_textures(
     for (index, texture) in textures.iter().enumerate() {
         if !required[index].iter().any(|&used| used) { continue; }
         let sampler = &texture.sampler;
-        anyhow::ensure!(
-            matches!(sampler.mag_filter, None | Some(MagFilter::Linear))
+        let supported_sampler = matches!(sampler.mag_filter, None | Some(MagFilter::Linear))
                 && matches!(sampler.min_filter, None | Some(MinFilter::LinearMipmapLinear))
                 && sampler.wrap_s == WrappingMode::Repeat
-                && sampler.wrap_t == WrappingMode::Repeat,
-            "glTF sampler requires unsupported filtering or wrapping"
-        );
+                && sampler.wrap_t == WrappingMode::Repeat;
+        if !supported_sampler {
+            log::warn!(
+                "glTF texture {index}: unsupported sampler settings; using the shared linear/repeat sampler"
+            );
+        }
         let source = images.get(texture.image).ok_or_else(|| anyhow!("Invalid glTF image index"))?;
         if let std::collections::hash_map::Entry::Vacant(entry) = prepared.images.entry(texture.image) {
             entry.insert(decode_gltf_image(source)?);

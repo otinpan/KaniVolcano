@@ -498,7 +498,7 @@ impl App {
 
 /// Converts material factors. Texture handles must be resolved after GPU upload.
 fn convert_gltf_material(model_material: &ModelMaterial) -> Material {
-    Material {
+    let mut material = Material {
         base_color: cgmath::vec4(
             model_material.base_color[0],
             model_material.base_color[1],
@@ -524,7 +524,16 @@ fn convert_gltf_material(model_material: &ModelMaterial) -> Material {
         double_sided: model_material.double_sided,
         pipeline_key: PipelineKey::Pbr3D,
         ..Material::default()
+    };
+    // Temporary visual approximation, not physical transmission. Keep glass visible
+    // at full transmission; replace this when transmission rendering is supported.
+    let transmission = model_material.transmission_factor.clamp(0.0, 1.0);
+    if transmission > 0.0 {
+        const FULL_TRANSMISSION_ALPHA: f32 = 0.2;
+        material.base_color.w *= 1.0 - transmission * (1.0 - FULL_TRANSMISSION_ALPHA);
+        material.alpha_mode = crate::component::AlphaMode::Blend;
     }
+    material
 }
 
 unsafe fn create_skybox_mesh(renderer: &mut VulkanRenderer, size: f32) -> Result<MeshHandle> {

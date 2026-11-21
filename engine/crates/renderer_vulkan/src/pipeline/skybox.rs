@@ -129,6 +129,7 @@ pub unsafe fn create_skybox_pipeline(device: &Device, data: &mut VulkanData) -> 
 
     let graphics_pipeline = GraphicsPipeline {
         key: PipelineKey::Skybox,
+        transparent: false,
         pipeline,
         layout: pipeline_layout,
         vertex_layout: VertexLayout::Skybox,

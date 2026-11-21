@@ -118,6 +118,7 @@ pub unsafe fn create_debug_line_pipeline(device: &Device, data: &mut VulkanData)
 
     data.pipelines.push(GraphicsPipeline {
         key: PipelineKey::DebugLine3D,
+        transparent: false,
         layout: pipeline_layout,
         pipeline,
         vertex_layout: VertexLayout::DebugLine3D,

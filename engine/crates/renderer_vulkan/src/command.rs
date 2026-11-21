@@ -454,6 +454,11 @@ fn sorted_render_indices(data: &VulkanData) -> Vec<usize> {
         match object.material.pipeline_key {
             PipelineKey::Skybox => continue,
             PipelineKey::Transparent3D => transparent_indices.push(index),
+            PipelineKey::Pbr3D
+                if object.material.alpha_mode == super::types::RenderAlphaMode::Blend =>
+            {
+                transparent_indices.push(index);
+            }
             PipelineKey::Ui2D => ui_indices.push(index),
             _ => opaque_indices.push(index),
         }
@@ -519,7 +524,15 @@ unsafe fn update_secondary_command_buffer(
         return Ok(command_buffer);
     }
 
-    let pipeline = renderer.data.pipeline(object.material.pipeline_key);
+    let pipeline = if object.material.pipeline_key == PipelineKey::Pbr3D {
+        let transparent = object.material.alpha_mode == super::types::RenderAlphaMode::Blend;
+        renderer.data.pipelines.iter()
+            .find(|pipeline| pipeline.key == PipelineKey::Pbr3D
+                && pipeline.transparent == transparent)
+            .ok_or_else(|| anyhow!("PBR pipeline not found (transparent={transparent})"))?
+    } else {
+        renderer.data.pipeline(object.material.pipeline_key)
+    };
     let Some(mesh) = renderer
         .data
         .meshes

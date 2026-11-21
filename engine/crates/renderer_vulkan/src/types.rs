@@ -176,6 +176,9 @@ pub struct GraphicsPipeline {
     pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 
+    // change
+    pub transparent: bool,
+
     // vertex layout to use this pipeline
     pub vertex_layout: VertexLayout,
 }
