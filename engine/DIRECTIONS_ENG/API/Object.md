@@ -58,6 +58,65 @@ context.spawn_model(
 
 The `Material.pipeline_key` must match the pipeline used when the model was loaded.
 
+### Creating glTF and GLB Models
+
+Load each model through `app.load_gltf_model()` before creating its instances.
+
+```rust
+fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+    let teacup = context.spawn_gltf_model(
+        "teacup",
+        Transform {
+            position: vec3(0.0, -5.0, 0.0),
+            rotation: vec3(45.0, 0.0, 0.0),
+            scale: vec3(2.0, 2.0, 2.0),
+        },
+        None,
+    )?;
+
+    let refrigerator = context.spawn_gltf_model(
+        "refrigerator",
+        Transform {
+            position: vec3(0.0, -3.0, 0.0),
+            rotation: vec3(90.0, 90.0, 0.0),
+            scale: vec3(1.0, 1.0, 1.0),
+        },
+        None,
+    )?;
+
+    let car = context.spawn_gltf_model(
+        "car",
+        Transform {
+            position: vec3(0.0, 0.0, 0.0),
+            rotation: vec3(90.0, 0.0, 0.0),
+            ..Default::default()
+        },
+        None,
+    )?;
+
+    let helmet = context.spawn_gltf_model(
+        "helmet",
+        Transform {
+            position: vec3(0.0, 5.0, 0.0),
+            rotation: vec3(90.0, 0.0, 0.0),
+            ..Default::default()
+        },
+        None,
+    )?;
+    Ok(())
+}
+```
+
+Arguments:
+
+1. Registered model name
+2. `Transform`
+3. Optional `Material`
+
+Pass `None` to use the materials defined in the model, or `Some(material)` to override the material for all primitives in the instance.
+
+![](../../../assets/gltf_models.png)
+
 ## Primitive Shapes
 
 Primitive functions create basic shapes.

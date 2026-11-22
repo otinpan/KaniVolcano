@@ -142,3 +142,19 @@ let scene_id = context.scene_id();
 ```
 
 Use it when manually adding `SceneOwned`, especially for entities created from commands.
+
+### `TextureColorSpace`
+
+```rust
+#[derive(Default)]
+pub enum TextureColorSpace {
+    #[default]
+    Srgb,   // Convert RGB values from sRGB to linear when sampled.
+    Linear, // Use stored values directly.
+}
+```
+
+- `Srgb`: automatically converts RGB values from sRGB to linear when sampled. Use it for color textures such as base color and emissive maps.
+- `Linear`: uses RGB values without color-space conversion. Use it for data textures such as normal, metallic-roughness, and occlusion maps.
+
+Select the color space with [`app.load_texture_with_color_space()`](API/App.md#loading-textures). `app.load_texture()` defaults to `Srgb`.

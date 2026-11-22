@@ -15,7 +15,7 @@ impl Scene for BasicFieldScene {
 
     fn on_enter(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         crate::system::FpsSystem::install(context)?;
-        context.set_msaa(Msaa::X1);
+        context.set_msaa(Msaa::X4);
         self.scene_id=context.scene_id();
         context.set_skybox("default")?;
         self.create_camera(context)?;
@@ -96,6 +96,7 @@ impl BasicFieldScene {
             "helmet",
             Transform{
                 position: vec3(0.0,5.0,0.0),
+                rotation: vec3(90.0,0.0,0.0),
                 ..Default::default()
             },
             None,
@@ -123,7 +124,7 @@ impl BasicFieldScene {
     }
 
     fn create_texts(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
-        let hello_world=context.spawn_text_3d(
+        /*let hello_world=context.spawn_text_3d(
             "eng_font",
             "Hello\nKaniVolcano",
             48.0,
@@ -133,7 +134,7 @@ impl BasicFieldScene {
             vec3(45.0,45.0,0.0),
             vec3(0.0,1.0,0.0),
             0.5,
-        );
+        );*/
 
         Ok(())
     }

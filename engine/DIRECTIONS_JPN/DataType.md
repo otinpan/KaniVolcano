@@ -156,3 +156,15 @@ context.add_component(
     },
 );
 ```
+
+### `ColorSpace`
+```rust
+pub enum TextureColorSpace{
+    #[default]
+    Srgb, // use converted pixels number, which are converted when sampling
+    Linear, // use pixels number directly
+}
+```
+
+* Srgb：画像のRGB値を、サンプリング時にsRGBからLinearに自動変換する。主に色を表すテクスチャ（Base Color、Emissive）に使用。
+* Linear：画像のRGB値を変換せず、そのまま使用する。主に数値データを表すテクスチャ（Normal、Metallic、Roughness、Occlusion）に使用。

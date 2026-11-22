@@ -35,11 +35,25 @@ unsafe{
 }
 ```
 1. モデルに付ける名前
-2. モデルのパス
+2. ファイルのパス
 3. パイプラインの種類
 4. モデルを自動的に解放するか
 
 を指定します  
+
+### `glTF`、`glb`ファイルのロード
+```rust
+app.load_gltf_model(
+    "teacup",
+    "assets/models/teacup.glb",
+    true,
+)?;
+```
+1. モデルに付ける名前
+2. ファイルのパス
+4. モデルを自動的に解放するか
+
+を指定します。Pipelineは自動的に決定されます
 
 ### `png`ファイルのロード
 ```rust
@@ -49,10 +63,18 @@ unsafe{
         "ghost",
         "assets/textures/ghost.png",
     )?;
+
+    app.load_texture_with_color_space(
+        "face", 
+        "assets/textures/texture.png", 
+        TextureColorSpace::Linear
+    )?;
 }
 ```
 1. テクスチャに付ける名前
 2. テクスチャのパス
+
+`load_texture_with_color_space()` では画像の色空間を指定することが出来ます。`load_texture()`では`TextureColorSpace::Srgb`で、サンプリング時に自動的にLinearに補完します。
 
 ### Skybox
 Skyboxとは背景に表示される立方体のことです。ワールドに立方体を置き、その内側に指定したテクスチャを張ることが出来ます。  

@@ -159,3 +159,9 @@ Fixed text render system
 * Reuse dedicated host-visible buffers for dynamic text updates, eliminating per-mesh GPU idle waits.
 * Recycle text buffers only after all frames using them have completed, with bounded spare-buffer caching.
 * Reuse freed mesh slots to prevent unbounded growth during repeated text updates.
+
+## v0.7.0
+Add `load_gltf_mode` loading glTF or glb and render them.
+* You can load glTF or glb format from `load_gltf_model(name, path,auto_release)`.
+* You can spawn gltf model using `context.spawn_gltf_model(name,Transform,Material)`
+* `load_texture_with_color_space(name,path,color_space)` enable to load texture selecting color space.

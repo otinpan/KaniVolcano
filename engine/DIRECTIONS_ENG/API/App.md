@@ -47,11 +47,36 @@ Arguments:
 
 `PipelineKey` decides the vertex layout used by the model. `auto_release` decides whether the mesh should be released automatically when nothing uses it anymore.
 
+## Loading glTF and GLB Models
+
+```rust
+unsafe {
+    app.load_gltf_model(
+        "teacup",
+        "assets/models/teacup.glb",
+        true,
+    )?;
+}
+```
+
+Arguments:
+
+1. Model name
+2. File path (`.gltf` or `.glb`)
+3. Whether to release the model asset automatically (`auto_release`)
+
+The pipeline is selected automatically. Use the registered name with `spawn_gltf_model()` to create an instance.
+
 ## Loading Textures
 
 ```rust
 unsafe {
     app.load_texture("ghost", "assets/textures/ghost.png")?;
+    app.load_texture_with_color_space(
+        "face",
+        "assets/textures/texture.png",
+        TextureColorSpace::Linear,
+    )?;
 }
 ```
 
@@ -59,6 +84,10 @@ Arguments:
 
 1. Texture name
 2. Texture file path
+
+`load_texture_with_color_space()` takes a third argument, `TextureColorSpace`, to select the image's color space. `load_texture()` uses `TextureColorSpace::Srgb`, which automatically converts RGB values from sRGB to linear when sampled. `TextureColorSpace::Linear` uses the stored values without this conversion.
+
+See [TextureColorSpace](../DataType.md#texturecolorspace) for common uses.
 
 ## Skybox
 

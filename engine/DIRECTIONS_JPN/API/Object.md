@@ -129,6 +129,59 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
 
 のコンポーネントが付与されます。
 
+#### glTf, glbモデルの作成
+```rust
+fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+    let teacup=context.spawn_gltf_model(
+        "teacup",
+        Transform { 
+            position: vec3(0.0,-5.0,0.0),
+            rotation: vec3(45.0,0.0,0.0), 
+            scale: vec3(2.0,2.0,2.0)
+        },
+        None,
+    );
+
+    let refrigerator = context.spawn_gltf_model(
+        "refrigerator",
+        Transform{
+            position: vec3(0.0,-3.0,0.0),
+            rotation: vec3(90.0,90.0,0.0),
+            scale: vec3(1.0,1.0,1.0),
+        },
+        None,
+    );
+    
+    let car=context.spawn_gltf_model(
+        "car",
+        Transform{
+            position: vec3(0.0, 0.0,0.0),
+            rotation: vec3(90.0,0.0,0.0),
+            ..Default::default()
+        },
+        None,
+    );
+
+    let helmet=context.spawn_gltf_model(
+        "helmet",
+        Transform{
+            position: vec3(0.0,5.0,0.0),
+            rotation: vec3(90.0,0.0,0.0),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(())
+}
+```
+* 名前
+* Transform
+* Material
+
+を引数で指定します。`Material`は指定しない場合は`None`とし、モデルで指定されているマテリアル情報を使用します。
+
+![](../../../assets/gltf_models.png)
+
 ## 基本図形の生成
 `spawn_triangle_3d()`のようなAPIで基本図形を描画できます。現段階ではこれらの基本図形を扱えます。
 * Triangle: 三角形
