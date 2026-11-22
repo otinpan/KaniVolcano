@@ -54,6 +54,7 @@
 |---|---|---|---|
 | 1 | PBRテクスチャの描画反映 | 専用descriptorを整備し、metallic-roughness → emissive・occlusion → normalの順に接続 | 中〜大 |
 | 2 | ロード失敗時のGPU資産回収 | 工程をまたぐ失敗と、GPU作成途中の失敗を回収 | 中 |
+| 2 | renderer.refresh_texture_descriptionsのチューニング | 現状リリースと再確保を1度で行っている | 小 |
 | 3 | テクスチャ自動解放 | 資産の所有・共有、Material変更、descriptorの寿命を管理 | 大 |
 | 4 | glTF, texture (color_space) 非同期ロード | CPU準備をバックグラウンド化し、既存の登録段階へ接続 | 中〜大 |
 | 5 | ノードアニメーション→スキニング | まず再生・補間、その後GPUでの頂点変形 | 大 |
