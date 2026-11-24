@@ -23,24 +23,32 @@ pub unsafe fn create_index_buffer(
         vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+    let mut destination = None;
+    let result = (|| -> Result<(vk::Buffer, vk::DeviceMemory)> {
+        let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
 
-    memcpy(indices.as_ptr(), memory.cast(), indices.len());
-    device.unmap_memory(staging_buffer_memory);
+        memcpy(indices.as_ptr(), memory.cast(), indices.len());
+        device.unmap_memory(staging_buffer_memory);
 
-    let (index_buffer, index_buffer_memory) = create_buffer(
-        instance,
-        device,
-        data,
-        size,
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    )?;
+        let (index_buffer, index_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
 
-    copy_buffer(device, data, staging_buffer, index_buffer, size)?;
+        destination = Some((index_buffer, index_buffer_memory));
+        copy_buffer(device, data, staging_buffer, index_buffer, size)?;
 
-    device.destroy_buffer(staging_buffer, None);
-    device.free_memory(staging_buffer_memory, None);
-
-    Ok((index_buffer, index_buffer_memory))
+        Ok((index_buffer, index_buffer_memory))
+    })();
+    super::buffer::release_upload_buffer(device, data, staging_buffer, staging_buffer_memory);
+    if result.is_err() {
+        if let Some((buffer, memory)) = destination {
+            super::buffer::release_upload_buffer(device, data, buffer, memory);
+        }
+    }
+    result
 }

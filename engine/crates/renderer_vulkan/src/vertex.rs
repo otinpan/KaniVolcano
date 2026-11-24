@@ -211,27 +211,36 @@ pub unsafe fn create_vertex_buffer<V>(
         vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+    let mut destination = None;
+    let result = (|| -> Result<(vk::Buffer, vk::DeviceMemory)> {
+        let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
 
-    // memcpy(GPU_MEMORY,VERTICES,SIZE)
-    memcpy(vertices.as_ptr(), memory.cast(), vertices.len());
-    device.unmap_memory(staging_buffer_memory);
+        // memcpy(GPU_MEMORY,VERTICES,SIZE)
+        memcpy(vertices.as_ptr(), memory.cast(), vertices.len());
+        device.unmap_memory(staging_buffer_memory);
 
-    let (vertex_buffer, vertex_buffer_memory) = create_buffer(
-        instance,
-        device,
-        data,
-        size,
-        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    )?;
+        let (vertex_buffer, vertex_buffer_memory) = create_buffer(
+            instance,
+            device,
+            data,
+            size,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
 
-    // copy staging buffer to vertex buffer
-    copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
+        // copy staging buffer to vertex buffer
+        destination = Some((vertex_buffer, vertex_buffer_memory));
+        copy_buffer(device, data, staging_buffer, vertex_buffer, size)?;
 
-    device.destroy_buffer(staging_buffer, None);
-    device.free_memory(staging_buffer_memory, None);
-    Ok((vertex_buffer, vertex_buffer_memory))
+        Ok((vertex_buffer, vertex_buffer_memory))
+    })();
+    super::buffer::release_upload_buffer(device, data, staging_buffer, staging_buffer_memory);
+    if result.is_err() {
+        if let Some((buffer, memory)) = destination {
+            super::buffer::release_upload_buffer(device, data, buffer, memory);
+        }
+    }
+    result
 }
 
 #[repr(C)]

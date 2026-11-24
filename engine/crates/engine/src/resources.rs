@@ -304,17 +304,25 @@ impl Resources {
         // Overwriting the name would strand the old model's ownership refs.
         // On rejection, the caller still owns the supplied GPU handles.
         anyhow::ensure!(!self.gltf_models.contains_key(&name), "model already registered: {name}");
+        let first_mesh = self.mesh_assets.len();
         let mesh_assets = mesh_handles.into_iter().map(|handles| {
             handles.into_iter().map(|handle| self.insert_mesh_asset(handle, auto_release)).collect()
         }).collect();
 
-        let id=self.insert_gltf_model_asset(
+        let result=self.insert_gltf_model_asset(
             gltf_model,
             mesh_assets,
             materials,
             textures,
             auto_release
-        )?;
+        );
+        let id = match result {
+            Ok(id) => id,
+            Err(error) => {
+                self.mesh_assets.truncate(first_mesh);
+                return Err(error);
+            }
+        };
         self.gltf_models.insert(name, id);
         Ok(id)
     }

@@ -3,6 +3,51 @@ use vulkanalia::prelude::v1_0::*;
 
 use super::types::VulkanData;
 
+// Only used after an upload wait fails without proving completion or device loss.
+#[derive(Clone, Debug, Default)]
+pub struct DeferredUploadCleanup {
+    pub pending: bool,
+    pub buffers: Vec<(vk::Buffer, vk::DeviceMemory)>,
+    pub images: Vec<(vk::Image, vk::DeviceMemory)>,
+    pub commands: Vec<vk::CommandBuffer>,
+}
+
+pub unsafe fn release_upload_buffer(device: &Device, data: &VulkanData, buffer: vk::Buffer, memory: vk::DeviceMemory) {
+    if data.deferred_upload_cleanup.borrow().pending {
+        data.deferred_upload_cleanup.borrow_mut().buffers.push((buffer, memory));
+    } else {
+        device.destroy_buffer(buffer, None);
+        device.free_memory(memory, None);
+    }
+}
+
+pub unsafe fn release_upload_image(device: &Device, data: &VulkanData, image: vk::Image, memory: vk::DeviceMemory) {
+    if data.deferred_upload_cleanup.borrow().pending {
+        data.deferred_upload_cleanup.borrow_mut().images.push((image, memory));
+    } else {
+        device.destroy_image(image, None);
+        device.free_memory(memory, None);
+    }
+}
+
+/// Caller must first establish device idle or device loss.
+pub unsafe fn drain_upload_cleanup(device: &Device, data: &VulkanData) {
+    let mut cleanup = data.deferred_upload_cleanup.borrow_mut();
+    for (buffer, memory) in cleanup.buffers.drain(..) {
+        device.destroy_buffer(buffer, None);
+        device.free_memory(memory, None);
+    }
+    for (image, memory) in cleanup.images.drain(..) {
+        device.destroy_image(image, None);
+        device.free_memory(memory, None);
+    }
+    if !cleanup.commands.is_empty() {
+        device.free_command_buffers(data.command_pool, &cleanup.commands);
+    }
+    cleanup.commands.clear();
+    cleanup.pending = false;
+}
+
 pub unsafe fn create_buffer(
     instance: &Instance,
     device: &Device,
@@ -17,17 +62,26 @@ pub unsafe fn create_buffer(
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let buffer = device.create_buffer(&buffer_info, None)?;
 
-    let requirements = device.get_buffer_memory_requirements(buffer);
-    let memory_info = vk::MemoryAllocateInfo::builder()
-        .allocation_size(requirements.size)
-        .memory_type_index(get_memory_type_index(
-            instance,
-            data,
-            properties,
-            requirements,
-        )?);
-    let buffer_memory = device.allocate_memory(&memory_info, None)?;
-    device.bind_buffer_memory(buffer, buffer_memory, 0)?;
+    let mut buffer_memory = vk::DeviceMemory::null();
+    let result = (|| -> Result<()> {
+        let requirements = device.get_buffer_memory_requirements(buffer);
+        let memory_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(get_memory_type_index(
+                instance,
+                data,
+                properties,
+                requirements,
+            )?);
+        buffer_memory = device.allocate_memory(&memory_info, None)?;
+        device.bind_buffer_memory(buffer, buffer_memory, 0)?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        device.destroy_buffer(buffer, None);
+        device.free_memory(buffer_memory, None);
+        return Err(error);
+    }
 
     Ok((buffer, buffer_memory))
 }
@@ -66,7 +120,10 @@ pub unsafe fn begin_single_time_commands(
     let info =
         vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
-    device.begin_command_buffer(command_buffer, &info)?;
+    if let Err(error) = device.begin_command_buffer(command_buffer, &info) {
+        device.free_command_buffers(data.command_pool, &[command_buffer]);
+        return Err(error.into());
+    }
 
     Ok(command_buffer)
 }
@@ -76,14 +133,30 @@ pub unsafe fn end_single_time_commands(
     data: &VulkanData,
     command_buffer: vk::CommandBuffer,
 ) -> Result<()> {
-    device.end_command_buffer(command_buffer)?;
+    if let Err(error) = device.end_command_buffer(command_buffer) {
+        device.free_command_buffers(data.command_pool, &[command_buffer]);
+        return Err(error.into());
+    }
 
     let command_buffers = &[command_buffer];
     let info = vk::SubmitInfo::builder().command_buffers(command_buffers);
 
     // submit
-    device.queue_submit(data.graphics_queue, &[info], vk::Fence::null())?;
-    device.queue_wait_idle(data.graphics_queue)?;
+    let result = device.queue_submit(data.graphics_queue, &[info], vk::Fence::null())
+        .and_then(|_| device.queue_wait_idle(data.graphics_queue));
+    if let Err(error) = result {
+        match device.device_wait_idle() {
+            Ok(()) | Err(vk::ErrorCode::DEVICE_LOST) => drain_upload_cleanup(device, data),
+            Err(wait_error) => {
+                let mut cleanup = data.deferred_upload_cleanup.borrow_mut();
+                cleanup.pending = true;
+                cleanup.commands.push(command_buffer);
+                return Err(anyhow!(error).context(format!("Upload completion unknown; cleanup deferred: {wait_error}")));
+            }
+        }
+        device.free_command_buffers(data.command_pool, &[command_buffer]);
+        return Err(error.into());
+    }
 
     device.free_command_buffers(data.command_pool, &[command_buffer]);
 

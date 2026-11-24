@@ -8,6 +8,7 @@ use kani_volcano_math::Transform;
 
 #[derive(Clone, Debug, Default)]
 pub struct VulkanData {
+    pub deferred_upload_cleanup: std::cell::RefCell<super::buffer::DeferredUploadCleanup>,
     // Debug
     pub messenger: vk::DebugUtilsMessengerEXT,
     // Surface

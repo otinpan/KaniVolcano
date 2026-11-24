@@ -198,6 +198,10 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn render(&mut self, window: &Window) -> Result<()> {
+        if self.data.deferred_upload_cleanup.borrow().pending {
+            self.device.device_wait_idle()?;
+            buffer::drain_upload_cleanup(&self.device, &self.data);
+        }
         // 1. wait for fence
         let in_flight_fence = self.data.in_flight_fences[self.frame];
         self.device
@@ -368,7 +372,7 @@ impl VulkanRenderer {
 
             }
 
-        if cleanup_errors.is_empty(){
+            if cleanup_errors.is_empty(){
                 return Err(error);
             }
 
@@ -419,6 +423,36 @@ impl VulkanRenderer {
             srgb: indices[0].map(|index| uploaded[index]),
             linear: indices[1].map(|index| uploaded[index]),
         }).collect())
+    }
+
+    /// Rolls back only the most recent, unpublished glTF texture batch.
+    /// Call before any render items or PBR descriptors reference these handles.
+    pub unsafe fn rollback_gltf_textures(&mut self, handles: &[GltfTextureHandle]) -> Result<()> {
+        let mut indices: Vec<_> = handles.iter()
+            .flat_map(|handle| [handle.srgb, handle.linear])
+            .flatten().map(|handle| handle.0).collect();
+        indices.sort_unstable();
+        indices.dedup();
+        let Some(&first) = indices.first() else { return Ok(()); };
+        anyhow::ensure!(first > 0 && indices.iter().copied().eq(first..self.data.textures.len()),
+            "Texture rollback requires the complete most recent batch");
+        anyhow::ensure!(!self.data.pbr_material_descriptor_sets.keys()
+            .any(|key| key.iter().any(|handle| handle.0 >= first)),
+            "Cannot roll back textures referenced by PBR descriptors");
+        anyhow::ensure!(!self.data.render_objects.iter()
+            .any(|item| item.material.pbr_texture_key().iter().any(|handle| handle.0 >= first)),
+            "Cannot roll back textures referenced by render items");
+        self.device.device_wait_idle()?;
+        let removed = self.data.textures.split_off(first);
+        // Rebuild descriptors for retained images. Removed images have never been
+        // submitted for drawing, and the device is idle even if rebuilding fails.
+        let result = self.refresh_texture_descriptors();
+        for texture in removed {
+            self.device.destroy_image_view(texture.image_view, None);
+            self.device.destroy_image(texture.image, None);
+            self.device.free_memory(texture.image_memory, None);
+        }
+        result
     }
 
     /// Uploads RGBA8 sRGB images using the shared batch upload path.
@@ -507,6 +541,7 @@ impl VulkanRenderer {
             self.data.descriptor_pool = vk::DescriptorPool::null();
         }
         self.data.global_descriptor_sets.clear();
+        self.data.pbr_global_descriptor_sets.clear();
         self.data.material_descriptor_sets.clear();
         self.data.light_descriptor_sets.clear();
         self.data.skybox_descriptor_sets.clear();
@@ -774,11 +809,14 @@ impl VulkanRenderer {
             ));
         }
 
-        self.device.device_wait_idle()?;
-        self.device.free_memory(mesh.index_buffer_memory, None);
+        if let Err(error) = self.device.device_wait_idle() {
+            *slot = Some(mesh);
+            return Err(error.into());
+        }
         self.device.destroy_buffer(mesh.index_buffer, None);
-        self.device.free_memory(mesh.vertex_buffer_memory, None);
+        self.device.free_memory(mesh.index_buffer_memory, None);
         self.device.destroy_buffer(mesh.vertex_buffer, None);
+        self.device.free_memory(mesh.vertex_buffer_memory, None);
 
         Ok(())
     }
@@ -1032,7 +1070,14 @@ impl VulkanRenderer {
     }
 
     pub unsafe fn destroy(&mut self) {
-        self.device.device_wait_idle().unwrap();
+        match self.device.device_wait_idle() {
+            Ok(()) | Err(vk::ErrorCode::DEVICE_LOST) => {}
+            Err(error) => {
+                log::error!("Cannot safely destroy renderer before GPU completion: {error}");
+                return;
+            }
+        }
+        buffer::drain_upload_cleanup(&self.device, &self.data);
 
         self.destroy_swapchain();
 

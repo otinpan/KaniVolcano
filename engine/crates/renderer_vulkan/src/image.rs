@@ -399,67 +399,77 @@ pub unsafe fn create_texture_from_pixels_with_color_space(
         vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
-    memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
-    device.unmap_memory(staging_buffer_memory);
+    let mut created_image = None;
+    let result = (|| -> Result<Texture> {
+        let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+        memcpy(pixels.as_ptr(), memory.cast(), pixels.len());
+        device.unmap_memory(staging_buffer_memory);
 
-    // create image (VkImage) for gpu
-    let (image, image_memory) = create_image(
-        instance,
-        device,
-        data,
-        width,
-        height,
-        mip_levels,
-        vk::SampleCountFlags::_1,
-        format,
-        vk::ImageTiling::OPTIMAL,
-        vk::ImageUsageFlags::SAMPLED
-            | vk::ImageUsageFlags::TRANSFER_DST
-            | vk::ImageUsageFlags::TRANSFER_SRC,
-        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-    )?;
+        // create image (VkImage) for gpu
+        let (image, image_memory) = create_image(
+            instance,
+            device,
+            data,
+            width,
+            height,
+            mip_levels,
+            vk::SampleCountFlags::_1,
+            format,
+            vk::ImageTiling::OPTIMAL,
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )?;
 
-    // copy image from staging buffer to VkImage
-    transition_image_layout(
-        device,
-        data,
-        image,
-        format,
-        vk::ImageLayout::UNDEFINED,
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        mip_levels,
-    )?;
-    copy_buffer_to_image(device, data, staging_buffer, image, width, height)?;
+        created_image = Some((image, image_memory));
 
-    device.destroy_buffer(staging_buffer, None);
-    device.free_memory(staging_buffer_memory, None);
+        // copy image from staging buffer to VkImage
+        transition_image_layout(
+            device,
+            data,
+            image,
+            format,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            mip_levels,
+        )?;
+        copy_buffer_to_image(device, data, staging_buffer, image, width, height)?;
 
-    generate_mipmaps(
-        instance,
-        device,
-        data,
-        image,
-        format,
-        width,
-        height,
-        mip_levels,
-    )?;
 
-    let image_view = create_image_view(
-        device,
-        image,
-        format,
-        vk::ImageAspectFlags::COLOR,
-        mip_levels,
-    )?;
+        generate_mipmaps(
+            instance,
+            device,
+            data,
+            image,
+            format,
+            width,
+            height,
+            mip_levels,
+        )?;
 
-    Ok(Texture {
-        image,
-        image_memory,
-        image_view,
-        mip_levels,
-    })
+        let image_view = create_image_view(
+            device,
+            image,
+            format,
+            vk::ImageAspectFlags::COLOR,
+            mip_levels,
+        )?;
+
+        Ok(Texture {
+            image,
+            image_memory,
+            image_view,
+            mip_levels,
+        })
+    })();
+    super::buffer::release_upload_buffer(device, data, staging_buffer, staging_buffer_memory);
+    if result.is_err() {
+        if let Some((image, memory)) = created_image {
+            super::buffer::release_upload_image(device, data, image, memory);
+        }
+    }
+    result
 }
 
 pub unsafe fn create_mask_texture_from_pixels(
@@ -825,25 +835,34 @@ unsafe fn create_image_with_options(
 
     // create image, but not allocated in GPU memory
     let image = device.create_image(&info, None)?;
-    // get memory size
-    let requirements = device.get_image_memory_requirements(image);
+    let mut image_memory = vk::DeviceMemory::null();
+    let result = (|| -> Result<()> {
+        // get memory size
+        let requirements = device.get_image_memory_requirements(image);
 
-    // search GPU memory which is DEVICE_LOCAL and usable this image
-    let info = vk::MemoryAllocateInfo::builder()
-        .allocation_size(requirements.size)
-        .memory_type_index(get_memory_type_index(
-            instance,
-            data,
-            properties,
-            requirements,
-        )?);
+        // search GPU memory which is DEVICE_LOCAL and usable this image
+        let info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(get_memory_type_index(
+                instance,
+                data,
+                properties,
+                requirements,
+            )?);
 
-    // allocate
-    let image_memory = device.allocate_memory(&info, None)?;
+        // allocate
+        image_memory = device.allocate_memory(&info, None)?;
 
-    // bind
-    device.bind_image_memory(image, image_memory, 0)?;
+        // bind
+        device.bind_image_memory(image, image_memory, 0)?;
 
+        Ok(())
+    })();
+    if let Err(error) = result {
+        device.destroy_image(image, None);
+        device.free_memory(image_memory, None);
+        return Err(error);
+    }
     Ok((image, image_memory))
 }
 

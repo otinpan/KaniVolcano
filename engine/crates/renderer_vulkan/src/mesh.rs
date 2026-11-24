@@ -26,7 +26,15 @@ pub unsafe fn create_mesh<V>(
         create_vertex_buffer(instance, device, data, &mesh_data.vertices)?;
 
     let (index_buffer, index_buffer_memory) =
-        create_index_buffer(instance, device, data, &mesh_data.indices)?;
+        match create_index_buffer(instance, device, data, &mesh_data.indices) {
+            Ok(buffers) => buffers,
+            Err(error) => {
+                // Vertex upload completed before the index upload started.
+                device.destroy_buffer(vertex_buffer, None);
+                device.free_memory(vertex_buffer_memory, None);
+                return Err(error);
+            }
+        };
 
     Ok(Mesh {
         vertex_buffer,

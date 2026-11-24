@@ -24,7 +24,7 @@ use crate::primitive::{
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
     UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
-    GltfModelAssetId, Material, GltfTextureHandle,
+    GltfModelAssetId, Material,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -357,18 +357,27 @@ impl App {
         path: &str,
         auto_release: bool,
     ) -> Result<GltfModelAssetId> {
+        anyhow::ensure!(self.resources.gltf_model_asset_id(name).is_none(), "model already registered: {name}");
         let gltf_model: GltfModel = kani_volcano_animation::load_gltf(path)?;
 
         // send mesh to gpu
-        // increment mesh ref count
         let mesh_handles: Vec<Vec<MeshHandle>>=self.renderer.load_meshes_from_gltf(&gltf_model.meshes)?;
 
         // load texture
-        let texture_handles: Vec<GltfTextureHandle> = self.renderer.load_textures_from_gltf(
+        let texture_handles = match self.renderer.load_textures_from_gltf(
             &gltf_model.images,
             &gltf_model.textures,
             &gltf_model.materials,
-        )?;
+        ) {
+            Ok(handles) => handles,
+            Err(error) => {
+                let cleanup = self.release_meshes(&mesh_handles);
+                return Err(match cleanup {
+                    Ok(()) => error.context("failed to load model textures"),
+                    Err(cleanup) => error.context(format!("failed to load model textures; mesh cleanup failed: {cleanup:#}")),
+                });
+            }
+        };
 
 
         // convert material
@@ -399,7 +408,30 @@ impl App {
 
 
         // register model
-        self.resources.register_gltf_model(name, gltf_model, mesh_handles, materials, texture_handles, auto_release)
+        match self.resources.register_gltf_model(name, gltf_model, mesh_handles.clone(), materials, texture_handles.clone(), auto_release) {
+            Ok(id) => Ok(id),
+            Err(error) => {
+                let mut failures = Vec::new();
+                if let Err(cleanup) = self.release_meshes(&mesh_handles) {
+                    failures.push(format!("mesh cleanup: {cleanup:#}"));
+                }
+                if let Err(cleanup) = self.renderer.rollback_gltf_textures(&texture_handles) {
+                    failures.push(format!("texture cleanup: {cleanup:#}"));
+                }
+                Err(error.context(format!("failed to register model asset; cleanup errors: {failures:?}")))
+            }
+        }
+    }
+
+    unsafe fn release_meshes(&mut self, mesh_handles: &[Vec<MeshHandle>]) -> Result<()> {
+        let mut failures = Vec::new();
+        for &mesh in mesh_handles.iter().flatten() {
+            if let Err(error) = self.renderer.destroy_mesh(mesh) {
+                failures.push(format!("{mesh:?}: {error:#}"));
+            }
+        }
+        anyhow::ensure!(failures.is_empty(), "{}", failures.join("; "));
+        Ok(())
     }
 
     pub unsafe fn load_texture(&mut self, name: &str, path: &str) -> Result<TextureHandle> {
