@@ -157,6 +157,7 @@ impl Executor {
         // Release outstanding only AFTER the original fiber became reusable.
         shared.complete(completed);
     }
+
     pub(crate) fn current_worker_id() -> WorkerId {
         with_current_executor(|executor| executor.worker_id)
     }

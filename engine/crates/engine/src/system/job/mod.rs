@@ -336,6 +336,7 @@ impl JobSystemShared {
             }
         }
     }
+
     pub(crate) fn next_ready_fiber(&self) -> Option<FiberId> {
         let (job, id) = {
             let mut state = self.scheduler.lock().unwrap();
@@ -361,6 +362,7 @@ impl JobSystemShared {
         self.fiber(id).assign_job(job);
         Some(id)
     }
+
     pub(crate) fn complete(&self, completed: CompletedJob) {
         let CompletedJob {
             group,

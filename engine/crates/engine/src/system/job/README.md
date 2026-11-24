@@ -89,3 +89,143 @@ cargo test --manifest-path crates/engine/src/system/job/test_harness/Cargo.toml 
 The harness compiles the actual module. Runtime tests cover waiting with a single
 initial fiber, cross-worker resume, borrowed chunks, nested scopes, panic cleanup,
 group ownership, and shutdown. Compile-fail tests cover scope/data escaping.
+
+
+# コンパイラ最適化によるバグ 2026/11/24
+JobSystemではfiberを採用している。Workerは
+* Worker
+  - Executor: `CURRENT_EXECUTOR` スレッドローカル変数
+  - Manager Fiber: Jobを実行するFiberを管理するスケジューラー
+  - Fiber: スタックを持つ、ジョブを実行する単位
+
+WorkerスレッドはExecutorをTLS (Thread Loacal Storage) に保持する。例えば、WorkerAはアドレス0x1000にExecutorを持つ、WorkerBはアドレス0x2000にExecutorを持つ。
+
+各Executorは`manger_fiber`と`current_fiber`があり、実行するfiberを切り替えることで実行する処理単位を切り替える。
+
+* `manager_fiber`: workerに固定されている。ジョブの選択・実行後の管理を行うfiber
+* `current_fiber`: 現在実行しているjobのfiber ID。実行していない場合は`None`になる
+
+流れは、
+1. Workerスレッド (WorkerA) が`manager_fiber`を動かし、共有キューの`JobSystemShared`から`next_ready_fiber()`で実行可能jobを未使用fiberに登録・取得
+2. `resume_fiber(id)`呼び出す
+  - `executor.current_fiber=Some(id)`で、Executorの`current_fiber`に取得したfiberを割り当てる。
+  - `resume_fiber(id)`内で`SwitchToFiber(id)`が呼ばれる
+    - `job_fiber_entry()`が呼ばれ、処理が開始・再開される
+    - もしjobがpending状態 (他の処理単位を待つ状態) になったらfiberはスタックを保持したまま、中断する
+    - 待機fiberは`JobSystemShared`の共通キューにpush
+  - WorkerAの`return_to_manager()`を呼びだす
+    - `assert!(executor.current_fiber.is_some())`
+  - `executor.executor=None`
+3. 他のWorkerスレッド (WorkerB) がpendingファイバーを`naxt_ready_fiber()`で取得する
+4. WorkerBが`resume_fiber(pending)`でpendingファイバーを再開
+  - `return_to_manager()`を呼びだす
+    - `assert!(executor.current_fiber.is_some())`
+  - `executor.executor=None`
+5. WorkerBの`current_fiber=None`にする
+
+
+```rust
+pub(crate) struct Executor {
+    worker_id: WorkerId,
+    shared: Arc<JobSystemShared>,
+    // Thread-affine: created and destroyed only within this worker.
+    manager_fiber: FiberHandle,
+    current_fiber: Option<FiberId>,
+}
+```
+```rust
+thread_local! {
+    static CURRENT_EXECUTOR: RefCell<Option<Executor>>
+        = const { RefCell::new(None) };
+}
+```
+```rust
+impl Executor {
+    fn run() -> Result<()> {
+        loop {
+            let shared = Self::current_shared();
+            if shared.is_shutdown() {
+                break;
+            }
+            shared.process_wake_requests();
+            if let Some(id) = shared.next_ready_fiber() {
+                unsafe {
+                    Self::resume_fiber(id);
+                }
+            } else {
+                shared.wait_for_work();
+            }
+        }
+        let executor = CURRENT_EXECUTOR
+            .with(|slot| slot.borrow_mut().take())
+            .unwrap();
+        unsafe { executor.manager_fiber.convert_back_to_thread() }
+    }
+
+    ...
+
+    pub(crate) unsafe fn return_to_manager() {
+        let manager = with_current_executor(|executor| {
+            assert!(executor.current_fiber.is_some());
+            executor.manager_fiber.as_ptr()
+        });
+        unsafe {
+            SwitchToFiber(manager);
+        }
+    }
+}
+```
+
+```rust
+fn with_current_executor<R>(f: impl FnOnce(&mut Executor) -> R) -> R {
+    CURRENT_EXECUTOR.with(|slot| f(slot.borrow_mut().as_mut().expect("no current Executor")))
+}
+```
+
+```rust
+pub(crate) unsafe extern "system" fn job_fiber_entry(_parameter: *mut c_void) {
+    let id = Executor::current_job_fiber().expect("job fiber has no FiberId");
+    loop {
+        let shared = Executor::current_shared();
+        // Assigned -> Running
+        let job = shared.fiber(id).take_job();
+        let completed = job.execute();
+        shared.fiber(id).mark_finished(completed);
+        // Do not keep this Arc on a suspended/reusable fiber's stack: that
+        // would retain the shared pool until this fiber executes again.
+        drop(shared);
+
+        unsafe {
+            Executor::return_to_manager();
+        }
+    }
+}
+```
+
+
+異なるWorkerスレッド (WorkerA, WorkerB) が同じfiberを処理することがある。この場合、コンパイラの最適化によって、想定しないことが起こる。
+
+想定している動作は以下のようになる
+* WorkerA
+  - fiber1開始
+    - `workerA.executor.current_fiber=fiber1`
+  - fiber1一時停止
+    - `assert!(workerA.executor.current_fiber.is_some())`
+    - `workerA.executor.current_fiber=None`
+* WorkerB
+  - fiber1再開
+    - `workerB.executor.current_fiber=fiber1`
+  - fiber1終了
+    - `assert!(workerB.executor.current_fiber.is_some())`
+    - `workerB.executor.current_fiber=None`
+
+Executorがfiberを`manager_fiber`に切り替えるタイミングで毎回`assert!(current_fiber.is_some())`で`current_fiber`がNoneでないことをチェックする。
+
+WorkerがExecutor取得するとき`with_current_executor()`を呼ぶ。この関数は現在のWorkerのExecutorを一時的に借りて、クロージャ`f`を実行する。
+
+コンパイラによる最適化によるThin LTO(Thin Link Time Optimization) により、上記の2つの部分で問題が生じる。
+
+
+
+
+
