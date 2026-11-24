@@ -38,11 +38,14 @@ pub struct VulkanData {
     pub global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub pbr_global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub material_descriptor_sets: Vec<vk::DescriptorSet>,
+    // Pool index for each set allocated by the incremental material path.
+    pub material_descriptor_pool_indices: Vec<usize>,
     pub pbr_material_descriptor_sets: HashMap<[TextureHandle;5], vk::DescriptorSet>,
     pub pbr_material_descriptor_pools: Vec<vk::DescriptorPool>,
     pub light_descriptor_sets: Vec<vk::DescriptorSet>,
     pub skybox_descriptor_sets: Vec<vk::DescriptorSet>,
     pub descriptor_pool: vk::DescriptorPool,
+    pub material_descirptor_pool: Vec<MaterialDescriptorPool>,
     // Framebuffers
     pub framebuffers: Vec<vk::Framebuffer>,
     // Command Pool
@@ -83,6 +86,13 @@ pub struct VulkanData {
     pub depth_image_view: vk::ImageView,
     // Camera
     pub camera: RenderCamera,
+}
+
+#[derive(Clone, Debug)]
+pub struct MaterialDescriptorPool{
+    pub handle: vk::DescriptorPool,
+    pub capacity: u32,
+    pub live_sets: u32,
 }
 
 #[derive(Clone, Debug)]

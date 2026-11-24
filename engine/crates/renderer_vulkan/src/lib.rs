@@ -69,7 +69,8 @@ pub use self::types::{
 use self::uniform::{
     create_descriptor_pool, create_global_descriptor_set_layout, create_global_descriptor_sets,
     create_light_descriptor_set_layout, create_light_descriptor_sets, create_light_uniform_buffers,
-    create_material_descriptor_set_layout, create_material_descriptor_sets,
+    create_material_descriptor_set_layout,
+    create_material_descriptor_sets,
     create_skybox_descriptor_set_layout, create_skybox_descriptor_sets, create_uniform_buffers,
     create_pbr_descriptor_set_layout, create_pbr_global_descriptor_sets,
     update_light_uniform_buffer, update_uniform_buffer,
@@ -176,7 +177,7 @@ impl VulkanRenderer {
         create_descriptor_pool(&device, &mut data)?;
         create_global_descriptor_sets(&device, &mut data)?;
         create_pbr_global_descriptor_sets(&device, &mut data)?;
-        create_material_descriptor_sets(&device, &mut data)?;
+        create_material_descriptor_sets(&device, &mut data, 0)?;
         create_light_descriptor_sets(&device, &mut data)?;
         create_skybox_descriptor_sets(&device, &mut data)?;
         create_command_buffers(&device, &mut data)?;
@@ -443,16 +444,23 @@ impl VulkanRenderer {
             .any(|item| item.material.pbr_texture_key().iter().any(|handle| handle.0 >= first)),
             "Cannot roll back textures referenced by render items");
         self.device.device_wait_idle()?;
-        let removed = self.data.textures.split_off(first);
-        // Rebuild descriptors for retained images. Removed images have never been
-        // submitted for drawing, and the device is idle even if rebuilding fails.
-        let result = self.refresh_texture_descriptors();
-        for texture in removed {
+        // Only this unpublished tail is freed; existing descriptor sets stay valid.
+        while self.data.textures.len() > first {
+            let index = self.data.textures.len() - 1;
+            let pool_index = self.data.material_descriptor_pool_indices[index];
+            let pool = &mut self.data.material_descirptor_pool[pool_index];
+            self.device.free_descriptor_sets(
+                pool.handle, &[self.data.material_descriptor_sets[index]],
+            )?;
+            pool.live_sets -= 1;
+            self.data.material_descriptor_sets.pop();
+            self.data.material_descriptor_pool_indices.pop();
+            let texture = self.data.textures.pop().unwrap();
             self.device.destroy_image_view(texture.image_view, None);
             self.device.destroy_image(texture.image, None);
             self.device.free_memory(texture.image_memory, None);
         }
-        result
+        Ok(())
     }
 
     /// Uploads RGBA8 sRGB images using the shared batch upload path.
@@ -467,7 +475,7 @@ impl VulkanRenderer {
     }
 
     /// Uploads RGBA8 images with per-image color spaces in input order,
-    /// refreshing descriptors once.
+    /// allocating descriptors only for the appended textures.
     /// Validates the entire batch before allocating GPU resources.
     /// An empty batch performs no GPU work.
     pub unsafe fn upload_decoded_textures_with_color_space(
@@ -504,9 +512,8 @@ impl VulkanRenderer {
             }
         }
         self.data.textures.extend(created);
-        if let Err(error) = self.refresh_texture_descriptors() {
-            // Uploads have completed, and the failed replacement was never used
-            // for rendering. The refresh preserves the old descriptors on error.
+        if let Err(error) = create_material_descriptor_sets(&self.device, &mut self.data, first) {
+            // Uploads have completed; failed descriptor allocation leaves existing sets intact.
             for texture in self.data.textures.drain(first..) {
                 self.device.destroy_image_view(texture.image_view, None);
                 self.device.destroy_image(texture.image, None);
@@ -524,46 +531,6 @@ impl VulkanRenderer {
     ) -> Result<TextureHandle> {
         let handles = self.upload_decoded_textures_with_color_space(&[(decoded, color_space)])?;
         Ok(handles[0])
-    }
-
-    // Preserve the live pool until its replacement is complete and the GPU is idle.
-    unsafe fn refresh_texture_descriptors(&mut self) -> Result<()> {
-        if self.data.uniform_buffers.is_empty() {
-            return Ok(());
-        }
-        // Move only the shared descriptor state aside; no texture/mesh copies.
-        // &mut self prevents callers from observing the replacement in progress.
-        let mut previous = VulkanData::default();
-        macro_rules! swap_descriptors {
-            () => {
-                std::mem::swap(&mut self.data.descriptor_pool, &mut previous.descriptor_pool);
-                std::mem::swap(&mut self.data.global_descriptor_sets, &mut previous.global_descriptor_sets);
-                std::mem::swap(&mut self.data.pbr_global_descriptor_sets, &mut previous.pbr_global_descriptor_sets);
-                std::mem::swap(&mut self.data.material_descriptor_sets, &mut previous.material_descriptor_sets);
-                std::mem::swap(&mut self.data.light_descriptor_sets, &mut previous.light_descriptor_sets);
-                std::mem::swap(&mut self.data.skybox_descriptor_sets, &mut previous.skybox_descriptor_sets);
-            };
-        }
-        swap_descriptors!();
-        let result = (|| -> Result<()> {
-            create_descriptor_pool(&self.device, &mut self.data)?;
-            create_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_material_descriptor_sets(&self.device, &mut self.data)?;
-            create_light_descriptor_sets(&self.device, &mut self.data)?;
-            create_skybox_descriptor_sets(&self.device, &mut self.data)?;
-            self.device.device_wait_idle()?;
-            Ok(())
-        })();
-        if result.is_err() {
-            // Restore the live descriptors; the new pool was never submitted.
-            swap_descriptors!();
-        }
-        // Success: destroy the old pool. Failure: destroy only the new pool.
-        if !previous.descriptor_pool.is_null() {
-            self.device.destroy_descriptor_pool(previous.descriptor_pool, None);
-        }
-        result
     }
 
     unsafe fn prepare_pbr_material_descriptors(&mut self) -> Result<()> {
@@ -625,14 +592,12 @@ impl VulkanRenderer {
                 .destroy_descriptor_pool(self.data.descriptor_pool, None);
 
             self.data.global_descriptor_sets.clear();
-            self.data.material_descriptor_sets.clear();
             self.data.light_descriptor_sets.clear();
             self.data.skybox_descriptor_sets.clear();
 
             create_descriptor_pool(&self.device, &mut self.data)?;
             create_global_descriptor_sets(&self.device, &mut self.data)?;
             create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_material_descriptor_sets(&self.device, &mut self.data)?;
             create_light_descriptor_sets(&self.device, &mut self.data)?;
             create_skybox_descriptor_sets(&self.device, &mut self.data)?;
         }
@@ -664,13 +629,11 @@ impl VulkanRenderer {
             self.device
                 .destroy_descriptor_pool(self.data.descriptor_pool, None);
             self.data.global_descriptor_sets.clear();
-            self.data.material_descriptor_sets.clear();
             self.data.light_descriptor_sets.clear();
             self.data.skybox_descriptor_sets.clear();
             create_descriptor_pool(&self.device, &mut self.data)?;
             create_global_descriptor_sets(&self.device, &mut self.data)?;
             create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-            create_material_descriptor_sets(&self.device, &mut self.data)?;
             create_light_descriptor_sets(&self.device, &mut self.data)?;
             create_skybox_descriptor_sets(&self.device, &mut self.data)?;
         }
@@ -1072,7 +1035,6 @@ impl VulkanRenderer {
         create_descriptor_pool(&self.device, &mut self.data)?;
         create_global_descriptor_sets(&self.device, &mut self.data)?;
         create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-        create_material_descriptor_sets(&self.device, &mut self.data)?;
         create_light_descriptor_sets(&self.device, &mut self.data)?;
         create_skybox_descriptor_sets(&self.device, &mut self.data)?;
         create_command_buffers(&self.device, &mut self.data)?;
@@ -1099,6 +1061,11 @@ impl VulkanRenderer {
             self.device.destroy_descriptor_pool(pool, None);
         }
         self.data.pbr_material_descriptor_sets.clear();
+        for pool in self.data.material_descirptor_pool.drain(..) {
+            self.device.destroy_descriptor_pool(pool.handle, None);
+        }
+        self.data.material_descriptor_sets.clear();
+        self.data.material_descriptor_pool_indices.clear();
         self.device.destroy_descriptor_set_layout(
             self.data.pbr_material_descriptor_set_layout, None,
         );
@@ -1181,7 +1148,6 @@ impl VulkanRenderer {
             .for_each(|buffer| self.device.destroy_buffer(buffer, None));
         self.data.pbr_camera_uniform_buffers_memory.drain(..)
             .for_each(|memory| self.device.free_memory(memory, None));
-        self.data.material_descriptor_sets.clear();
         self.data.light_descriptor_sets.clear();
         self.data.skybox_descriptor_sets.clear();
         self.data
