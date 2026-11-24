@@ -505,16 +505,12 @@ impl VulkanRenderer {
         }
         self.data.textures.extend(created);
         if let Err(error) = self.refresh_texture_descriptors() {
-            // The refresh waited for the device before replacing descriptors.
-            // Wait again before releasing images if the refresh itself failed.
-            self.device.device_wait_idle()?;
+            // Uploads have completed, and the failed replacement was never used
+            // for rendering. The refresh preserves the old descriptors on error.
             for texture in self.data.textures.drain(first..) {
                 self.device.destroy_image_view(texture.image_view, None);
                 self.device.destroy_image(texture.image, None);
                 self.device.free_memory(texture.image_memory, None);
-            }
-            if let Err(restore_error) = self.refresh_texture_descriptors() {
-                return Err(error.context(format!("Descriptor restoration failed: {restore_error}")));
             }
             return Err(error);
         }
@@ -530,28 +526,44 @@ impl VulkanRenderer {
         Ok(handles[0])
     }
 
-    // TODO: Speedup. Clearing all descriptors and recreating descriptors slow loading time
+    // Preserve the live pool until its replacement is complete and the GPU is idle.
     unsafe fn refresh_texture_descriptors(&mut self) -> Result<()> {
         if self.data.uniform_buffers.is_empty() {
             return Ok(());
         }
-        self.device.device_wait_idle()?;
-        if !self.data.descriptor_pool.is_null() {
-            self.device.destroy_descriptor_pool(self.data.descriptor_pool, None);
-            self.data.descriptor_pool = vk::DescriptorPool::null();
+        // Move only the shared descriptor state aside; no texture/mesh copies.
+        // &mut self prevents callers from observing the replacement in progress.
+        let mut previous = VulkanData::default();
+        macro_rules! swap_descriptors {
+            () => {
+                std::mem::swap(&mut self.data.descriptor_pool, &mut previous.descriptor_pool);
+                std::mem::swap(&mut self.data.global_descriptor_sets, &mut previous.global_descriptor_sets);
+                std::mem::swap(&mut self.data.pbr_global_descriptor_sets, &mut previous.pbr_global_descriptor_sets);
+                std::mem::swap(&mut self.data.material_descriptor_sets, &mut previous.material_descriptor_sets);
+                std::mem::swap(&mut self.data.light_descriptor_sets, &mut previous.light_descriptor_sets);
+                std::mem::swap(&mut self.data.skybox_descriptor_sets, &mut previous.skybox_descriptor_sets);
+            };
         }
-        self.data.global_descriptor_sets.clear();
-        self.data.pbr_global_descriptor_sets.clear();
-        self.data.material_descriptor_sets.clear();
-        self.data.light_descriptor_sets.clear();
-        self.data.skybox_descriptor_sets.clear();
-        create_descriptor_pool(&self.device, &mut self.data)?;
-        create_global_descriptor_sets(&self.device, &mut self.data)?;
-        create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
-        create_material_descriptor_sets(&self.device, &mut self.data)?;
-        create_light_descriptor_sets(&self.device, &mut self.data)?;
-        create_skybox_descriptor_sets(&self.device, &mut self.data)?;
-        Ok(())
+        swap_descriptors!();
+        let result = (|| -> Result<()> {
+            create_descriptor_pool(&self.device, &mut self.data)?;
+            create_global_descriptor_sets(&self.device, &mut self.data)?;
+            create_pbr_global_descriptor_sets(&self.device, &mut self.data)?;
+            create_material_descriptor_sets(&self.device, &mut self.data)?;
+            create_light_descriptor_sets(&self.device, &mut self.data)?;
+            create_skybox_descriptor_sets(&self.device, &mut self.data)?;
+            self.device.device_wait_idle()?;
+            Ok(())
+        })();
+        if result.is_err() {
+            // Restore the live descriptors; the new pool was never submitted.
+            swap_descriptors!();
+        }
+        // Success: destroy the old pool. Failure: destroy only the new pool.
+        if !previous.descriptor_pool.is_null() {
+            self.device.destroy_descriptor_pool(previous.descriptor_pool, None);
+        }
+        result
     }
 
     unsafe fn prepare_pbr_material_descriptors(&mut self) -> Result<()> {
