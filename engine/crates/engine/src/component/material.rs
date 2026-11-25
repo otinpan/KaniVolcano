@@ -1,5 +1,7 @@
 use cgmath::{Vector3, Vector4, vec3, vec4};
-use renderer_vulkan::{PipelineKey, TextureHandle};
+use anyhow::{Result, anyhow};
+use renderer_vulkan::{PipelineKey, RenderAlphaMode, RenderMaterial};
+use crate::{Resources, TextureAssetId};
 
 use super::Component;
 pub type Vec3 = Vector3<f32>;
@@ -7,23 +9,23 @@ pub type Vec3 = Vector3<f32>;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Material {
     pub base_color: Vector4<f32>,
-    pub base_color_texture: Option<TextureHandle>,
+    pub base_color_texture: Option<TextureAssetId>,
 
     pub metallic: f32,
 
     pub roughness: f32,
 
-    pub metallic_roughness_texture: Option<TextureHandle>,
+    pub metallic_roughness_texture: Option<TextureAssetId>,
 
-    pub normal_texture: Option<TextureHandle>,
+    pub normal_texture: Option<TextureAssetId>,
     pub normal_scale: f32, 
 
     pub emissive_color: Vector3<f32>,
     pub emissive_strength: f32,
-    pub emissive_texture: Option<TextureHandle>,
+    pub emissive_texture: Option<TextureAssetId>,
 
     pub occlusion_strength: f32,
-    pub occlusion_texture: Option<TextureHandle>,
+    pub occlusion_texture: Option<TextureAssetId>,
 
     pub alpha_mode: AlphaMode,
     pub alpha_cutoff: f32,
@@ -41,19 +43,52 @@ pub enum AlphaMode{
 }
 
 impl Material {
+    /// Resolves texture assets for rendering without changing ownership counts.
+    pub fn to_render_material(&self, resources: &Resources) -> Result<RenderMaterial> {
+        let resolve = |id: Option<TextureAssetId>| {
+            id.map(|id| {
+                resources.get_texture_handle(id)
+                    .ok_or_else(|| anyhow!("texture asset not found: {id:?}"))
+            }).transpose()
+        };
+
+        Ok(RenderMaterial {
+            base_color: self.base_color,
+            base_color_texture: resolve(self.base_color_texture)?,
+            metallic: self.metallic,
+            roughness: self.roughness,
+            metallic_roughness_texture: resolve(self.metallic_roughness_texture)?,
+            normal_texture: resolve(self.normal_texture)?,
+            normal_scale: self.normal_scale,
+            emissive_color: self.emissive_color,
+            emissive_strength: self.emissive_strength,
+            emissive_texture: resolve(self.emissive_texture)?,
+            occlusion_strength: self.occlusion_strength,
+            occlusion_texture: resolve(self.occlusion_texture)?,
+            alpha_mode: match self.alpha_mode {
+                AlphaMode::Opaque => RenderAlphaMode::Opaque,
+                AlphaMode::Mask => RenderAlphaMode::Mask,
+                AlphaMode::Blend => RenderAlphaMode::Blend,
+            },
+            alpha_cutoff: self.alpha_cutoff,
+            double_sided: self.double_sided,
+            pipeline_key: self.pipeline_key,
+        })
+    }
+
     pub const fn new(
         base_color: Vector4<f32>,
-        base_color_texture: Option<TextureHandle>,
+        base_color_texture: Option<TextureAssetId>,
         metallic: f32,
         roughness: f32,
-        metallic_roughness_texture: Option<TextureHandle>,
-        normal_texture: Option<TextureHandle>,
+        metallic_roughness_texture: Option<TextureAssetId>,
+        normal_texture: Option<TextureAssetId>,
         normal_scale :f32,
         emissive_color: Vector3<f32>,
         emissive_strength: f32,
-        emissive_texture: Option<TextureHandle>,
+        emissive_texture: Option<TextureAssetId>,
         occlusion_strength: f32,
-        occlusion_texture: Option<TextureHandle>,
+        occlusion_texture: Option<TextureAssetId>,
         alpha_mode: AlphaMode,
         alpha_cutoff: f32,
         double_sided: bool,
@@ -82,32 +117,7 @@ impl Material {
 
 impl Component for Material {}
 
-impl From<&Material> for renderer_vulkan::RenderMaterial {
-    fn from(material: &Material) -> Self {
-        Self {
-            base_color: material.base_color,
-            base_color_texture: material.base_color_texture,
-            metallic: material.metallic,
-            roughness: material.roughness,
-            metallic_roughness_texture: material.metallic_roughness_texture,
-            normal_texture: material.normal_texture,
-            normal_scale: material.normal_scale,
-            emissive_color: material.emissive_color,
-            emissive_strength: material.emissive_strength,
-            emissive_texture: material.emissive_texture,
-            occlusion_strength: material.occlusion_strength,
-            occlusion_texture: material.occlusion_texture,
-            alpha_mode: match material.alpha_mode {
-                AlphaMode::Opaque => renderer_vulkan::RenderAlphaMode::Opaque,
-                AlphaMode::Mask => renderer_vulkan::RenderAlphaMode::Mask,
-                AlphaMode::Blend => renderer_vulkan::RenderAlphaMode::Blend,
-            },
-            alpha_cutoff: material.alpha_cutoff,
-            double_sided: material.double_sided,
-            pipeline_key: material.pipeline_key,
-        }
-    }
-}
+
 
 impl Default for Material {
     fn default() -> Self {

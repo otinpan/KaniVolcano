@@ -2,7 +2,7 @@ use crate::{PrimitiveMesh, Material,  PrimitiveType};
 use anyhow::{anyhow, Result};
 use cgmath::Vector3;
 use renderer_vulkan::{
-    MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout, VulkanRenderer,
+    MeshHandle, SkyboxTextureHandle, TextureHandle, VertexLayout,
     FontHandle,
 };
 use kani_volcano_audio::{
@@ -23,8 +23,19 @@ pub struct MeshAsset {
     pub auto_release: bool,
 }
 
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MeshAssetId(pub usize);
+
+#[derive(Debug)]
+pub struct TextureAsset{
+    pub handle: TextureHandle,
+    pub ref_count: usize,
+    pub auto_release: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TextureAssetId(pub usize);
 
 #[derive(Debug)]
 pub struct FontAsset{
@@ -83,7 +94,8 @@ pub use renderer_vulkan::GltfTextureHandle;
 pub struct Resources {
     mesh_assets: Vec<Option<MeshAsset>>,
     models: HashMap<String, MeshAssetId>,
-    textures: HashMap<String, TextureHandle>,
+    texture_assets: Vec<Option<TextureAsset>>,
+    textures: HashMap<String, TextureAssetId>,
     primitive_meshes: Vec<PrimitiveMesh>,
     skybox_mesh: Option<MeshHandle>,
     skybox_textures: HashMap<String, SkyboxTextureHandle>,
@@ -222,6 +234,18 @@ impl Resources {
         id
     }
 
+    pub fn insert_texture_asset(&mut self, handle: TextureHandle, auto_release: bool) -> TextureAssetId{
+        let id = TextureAssetId(self.texture_assets.len());
+
+        self.texture_assets.push(Some(TextureAsset{
+            handle,
+            ref_count: 0,
+            auto_release,
+        }));
+
+        id
+    }
+
     // Increment mesh ref count
     pub fn insert_gltf_model_asset(
         &mut self,
@@ -291,6 +315,20 @@ impl Resources {
         id
     }
 
+    pub fn register_texture(
+        &mut self,
+        name: impl Into<String>,
+        handle: TextureHandle,
+        auto_release: bool,
+    ) -> Result<TextureAssetId> {
+        let name = name.into();
+        anyhow::ensure!(!self.textures.contains_key(&name), "texture already registered: {name}");
+        let id = self.insert_texture_asset(handle, auto_release);
+
+        self.textures.insert(name, id);
+        Ok(id)
+    }
+
     pub fn register_gltf_model(
         &mut self,
         name: impl Into<String>,
@@ -327,10 +365,6 @@ impl Resources {
         Ok(id)
     }
 
-    pub fn register_texture(&mut self, name: &str, handle: TextureHandle) -> TextureHandle {
-        self.textures.insert(name.to_string(), handle);
-        handle
-    }
 
     pub fn register_skybox_texture(
         &mut self,
@@ -341,9 +375,6 @@ impl Resources {
         handle
     }
 
-    pub(crate) fn set_textures(&mut self, textures: HashMap<String, TextureHandle>) {
-        self.textures = textures;
-    }
 
     pub(crate) fn register_primitive_mesh(&mut self, mesh: PrimitiveMesh) -> PrimitiveMesh {
         self.primitive_meshes.push(mesh);
@@ -378,16 +409,16 @@ impl Resources {
         self.models.get(name).copied()
     }
 
+    pub fn texture_asset_id(&self, name: &str) -> Option<TextureAssetId>{
+        self.textures.get(name).copied()
+    }
+
     pub fn gltf_model_asset_id(&self, name: &str) -> Option<GltfModelAssetId>{
         self.gltf_models.get(name).copied()
     }
 
     pub(crate) fn gltf_model_asset(&self, id: GltfModelAssetId) -> Option<&GltfModelAsset> {
         self.gltf_model_assets.get(id.0)?.as_ref()
-    }
-
-    pub fn get_texture_handle(&self, name: &str) -> Option<TextureHandle> {
-        self.textures.get(name).copied()
     }
 
     pub fn primitive_asset_id(
@@ -407,6 +438,13 @@ impl Resources {
 
     pub fn get_mesh_handle(&self, id: MeshAssetId) -> Option<MeshHandle> {
         self.mesh_assets
+            .get(id.0)?
+            .as_ref()
+            .map(|asset| asset.handle)
+    }
+
+    pub fn get_texture_handle(&self, id: TextureAssetId) -> Option<TextureHandle>{
+        self.texture_assets
             .get(id.0)?
             .as_ref()
             .map(|asset| asset.handle)
@@ -524,6 +562,12 @@ impl Resources {
         Some(asset.handle)
     }
 
+    pub fn retain_texture(&mut self, id: TextureAssetId) -> Option<TextureHandle> {
+        let asset = self.texture_assets.get_mut(id.0)?.as_mut()?;
+        asset.ref_count += 1;
+        Some(asset.handle)
+    }
+
     pub fn retain_gltf_model(&mut self, id: GltfModelAssetId) -> Result<()>{
         let model=self.gltf_model_assets
             .get_mut(id.0)
@@ -571,19 +615,26 @@ impl Resources {
         None
     }
 
-    pub(crate) unsafe fn release_mesh_for_renderer(
-        &mut self,
-        id: MeshAssetId,
-        renderer: &mut VulkanRenderer,
-    ) -> Result<()> {
-        if let Some(handle) = self.release_mesh(id) {
-            log::debug!("Mesh asset released and ready to destroy: {handle:?}");
-            renderer.destroy_mesh(handle)?;
-            assert!(renderer.data.meshes[handle.index].is_none());
+    /// Releases one ownership reference and returns the handle for GPU destruction.
+    #[must_use = "returned texture handles must be destroyed by the renderer"]
+    pub fn release_texture(&mut self, id: TextureAssetId) -> Option<TextureHandle> {
+        let asset = self.texture_assets.get_mut(id.0)?.as_mut()?;
+
+        if asset.ref_count == 0 {
+            return None;
+        }
+        asset.ref_count -= 1;
+
+        if asset.ref_count == 0 && asset.auto_release {
+            let handle = asset.handle;
+            self.texture_assets[id.0] = None;
+            self.textures.retain(|_, value| *value != id);
+            return Some(handle);
         }
 
-        Ok(())
+        None
     }
+
 
 }
 
@@ -592,6 +643,7 @@ impl Default for Resources {
         Self {
             mesh_assets: Vec::new(),
             models: HashMap::new(),
+            texture_assets: Vec::new(),
             textures: HashMap::new(),
             primitive_meshes: Vec::new(),
             skybox_mesh: None,

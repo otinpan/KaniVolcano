@@ -230,6 +230,13 @@ Main Thread
 		- scene: シーンに含まれる
 	- 静的なモデルの描画
 		- Materia
+* TextureAssetの実装
+	- TextureHandleに参照カウンタを作成する
+	- glTFモデルに登録: 異なるtextureごとにインクリメント
+	- glTFモデルの削除: 異なるのtextureごとにデクリメント
+	- EntityにMaterial付与: 使用する異なるtextureごとにインクリメント
+	- Materialの変更: 新しい参照をインクリメント、不要な参照をデクリメント
+	- Entity削除、Material取り外し: 使用していたtextureのデクリメント
 * gltf/glbの読み込み
 	- gltfクレート
 	- meshの頂点・インデックスの読み込み

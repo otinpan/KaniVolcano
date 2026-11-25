@@ -32,7 +32,7 @@ pub use input::Input;
 pub use primitive::{PrimitiveMesh, PrimitiveShape, PrimitiveType};
 pub use renderer_vulkan::{Msaa, PipelineKey, TextureColorSpace, VertexLayout};
 pub use resources::{
-    MeshAsset, MeshAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
+    MeshAsset, MeshAssetId, TextureAsset, TextureAssetId, Resources, FontAssetId, FontAsset, AudioAsset, AudioAssetId,
     AudioEmitterId, AudioEmitterResource, AudioBusId, AudioBusResource,
     AudioPlaybackId, AudioPlaybackResource, GltfModelAsset, GltfModelAssetId, GltfTextureHandle,
 };
@@ -66,7 +66,7 @@ pub mod prelude {
         UpdateContext, UpdateSystem, Visibility, run, Text, TextPipeline, TimeManagementApi,
         AudioEmitterSettings, AudioAssetId, AudioBusId, AudioEmitterId, AudioPlaybackId, AudioSend,
         AudioBusSettings, AudioBusType, AudioSource, PlaybackSettings, JobSystemHandle, DebugPauseCommand,
-        DrawOrder, AlphaMode, GltfModelAssetId, GltfModelRoot, ParentComponent, 
+        DrawOrder, AlphaMode, GltfModelAssetId, GltfModelRoot, ParentComponent, TextureAssetId,
     };
 
     pub use kani_volcano_math::Transform;

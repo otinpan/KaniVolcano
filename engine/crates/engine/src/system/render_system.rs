@@ -175,18 +175,18 @@ impl RenderSystem {
         // if entity have Visibility and it is false, this entity is not be rendered
         let render_items = context
             .query2::<GlobalTransform, MeshRenderer>()
-            .map(|(entity, transform, mesh_renderer)| RenderItem {
+            .map(|(entity, transform, mesh_renderer)| -> Result<RenderItem> { Ok(RenderItem {
                 mesh_index: mesh_renderer.mesh,
                 matrix: transform.matrix,
-                material: (&mesh_renderer.material).into(),
+                material: mesh_renderer.material.to_render_material(context.resources())?,
                 is_visible: context
                     .get_component::<Visibility>(entity)
                     .is_none_or(|visibility| visibility.is_visible),
                 draw_order: context
                     .get_component::<DrawOrder>(entity)
                     .map_or(0, |draw_order| draw_order.0),
-            })
-            .collect::<Vec<_>>();
+            }) })
+            .collect::<Result<Vec<_>>>()?;
 
         context.set_render_items(render_items);
 
