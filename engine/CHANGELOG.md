@@ -165,3 +165,6 @@ Add `load_gltf_mode` loading glTF or glb and render them.
 * You can load glTF or glb format from `load_gltf_model(name, path,auto_release)`.
 * You can spawn gltf model using `context.spawn_gltf_model(name,Transform,Material)`
 * `load_texture_with_color_space(name,path,color_space)` enable to load texture selecting color space.
+
+## v0.7.1
+Fixed job system crashes in optimized builds caused by reusing a previous worker’s TLS address after fiber migration. Prevented inlining of executor TLS access to ensure it is resolved on the current worker.
