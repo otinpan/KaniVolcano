@@ -226,6 +226,15 @@ WorkerがExecutor取得するとき`with_current_executor()`を呼ぶ。この�
 コンパイラによる最適化によるThin LTO(Thin Link Time Optimization) により、上記の2つの部分で問題が生じる。
 
 
+```rust
+// Keep TLS lookup inside this call so migrating fibers do not reuse a previous worker's TLS address across SwitchToFiber.
+#[inline(never)]
+fn with_current_executor<R>(f: impl FnOnce(&mut Executor) -> R) -> R {
+    CURRENT_EXECUTOR.with(|slot| f(slot.borrow_mut().as_mut().expect("no current Executor")))
+}
+```
+
+
 
 
 

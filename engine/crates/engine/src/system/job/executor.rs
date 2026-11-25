@@ -11,7 +11,8 @@ use windows_sys::Win32::System::Threading::SwitchToFiber;
 thread_local! {
     static CURRENT_EXECUTOR: RefCell<Option<Executor>> = const { RefCell::new(None) };
 }
-// The TLS borrow must end before any fiber switch.
+// Keep TLS lookup inside this call so migrating fibers do not reuse a previous worker's TLS address across SwitchToFiber.
+#[inline(never)]
 fn with_current_executor<R>(f: impl FnOnce(&mut Executor) -> R) -> R {
     CURRENT_EXECUTOR.with(|slot| f(slot.borrow_mut().as_mut().expect("no current Executor")))
 }
@@ -167,6 +168,9 @@ impl Executor {
     pub(crate) fn current_shared() -> Arc<JobSystemShared> {
         with_current_executor(|executor| executor.shared.clone())
     }
+
+    // Keep TLS lookup inside this call for the same reason as with_current_executor.
+    #[inline(never)]
     pub(crate) fn try_current_shared() -> Option<Arc<JobSystemShared>> {
         CURRENT_EXECUTOR.with(|slot| {
             slot.borrow()
