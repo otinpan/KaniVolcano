@@ -168,7 +168,7 @@ impl VulkanRenderer {
         create_framebuffers(&device, &mut data)?;
         create_texture_sampler(&device, &mut data)?;
         let white_texture = create_white_texture(&instance, &device, &mut data)?;
-        data.textures.push(white_texture);
+        data.textures.push(Some(white_texture));
         let black_skybox_texture = create_black_skybox_texture(&instance, &device, &mut data)?;
         data.skybox_textures.push(black_skybox_texture);
         create_uniform_buffers(&instance, &device, &mut data)?;
@@ -437,6 +437,8 @@ impl VulkanRenderer {
         let Some(&first) = indices.first() else { return Ok(()); };
         anyhow::ensure!(first > 0 && indices.iter().copied().eq(first..self.data.textures.len()),
             "Texture rollback requires the complete most recent batch");
+        anyhow::ensure!(self.data.textures[first..].iter().all(Option::is_some),
+            "Cannot roll back missing textures");
         anyhow::ensure!(!self.data.pbr_material_descriptor_sets.keys()
             .any(|key| key.iter().any(|handle| handle.0 >= first)),
             "Cannot roll back textures referenced by PBR descriptors");
@@ -455,7 +457,7 @@ impl VulkanRenderer {
             pool.live_sets -= 1;
             self.data.material_descriptor_sets.pop();
             self.data.material_descriptor_pool_indices.pop();
-            let texture = self.data.textures.pop().unwrap();
+            let texture = self.data.textures.pop().flatten().expect("validated texture batch");
             self.device.destroy_image_view(texture.image_view, None);
             self.device.destroy_image(texture.image, None);
             self.device.free_memory(texture.image_memory, None);
@@ -511,10 +513,10 @@ impl VulkanRenderer {
                 }
             }
         }
-        self.data.textures.extend(created);
+        self.data.textures.extend(created.into_iter().map(Some));
         if let Err(error) = create_material_descriptor_sets(&self.device, &mut self.data, first) {
             // Uploads have completed; failed descriptor allocation leaves existing sets intact.
-            for texture in self.data.textures.drain(first..) {
+            for texture in self.data.textures.drain(first..).flatten() {
                 self.device.destroy_image_view(texture.image_view, None);
                 self.device.destroy_image(texture.image, None);
                 self.device.free_memory(texture.image_memory, None);
@@ -1077,7 +1079,7 @@ impl VulkanRenderer {
 
         self.device.destroy_sampler(self.data.texture_sampler, None);
 
-        self.data.textures.drain(..).for_each(|texture| {
+        self.data.textures.drain(..).flatten().for_each(|texture| {
             self.device.destroy_image_view(texture.image_view, None);
             self.device.destroy_image(texture.image, None);
             self.device.free_memory(texture.image_memory, None);

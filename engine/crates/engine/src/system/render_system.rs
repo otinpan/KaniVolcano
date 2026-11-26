@@ -100,6 +100,10 @@ impl<'a> RenderContext<'a> {
         self.renderer.destroy_mesh(mesh)
     }
 
+    pub(crate) unsafe fn destroy_texture(&mut self, texture: renderer_vulkan::TextureHandle) -> Result<()>{
+        self.renderer.destroy_texture(texture)
+    }
+
     pub(crate) unsafe fn set_skybox(
         &mut self,
         mesh: renderer_vulkan::MeshHandle,
@@ -217,6 +221,9 @@ impl RenderSystem {
             match command {
                 RenderCommand::DestroyMesh { mesh } => unsafe {
                     context.destroy_mesh(mesh)?;
+                },
+                RenderCommand::DestroyTexture { texture } => unsafe {
+                    context.destroy_texture(texture)?;
                 },
                 RenderCommand::UpdatePrimitiveMesh { asset_id, shape } => {
                     let primitive_type = context

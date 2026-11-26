@@ -134,6 +134,7 @@ pub unsafe fn create_pbr_material_descriptor_sets(
         for handle in handles {
             anyhow::ensure!(
                 data.textures.get(handle.0)
+                    .and_then(Option::as_ref)
                     .is_some_and(|texture| texture.image_view != vk::ImageView::null()),
                 "Invalid PBR texture handle: {}", handle.0
             );
@@ -149,7 +150,7 @@ pub unsafe fn create_pbr_material_descriptor_sets(
         for (binding, handle) in handles.iter().enumerate() {
             let image_infos = [vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(data.textures[handle.0].image_view)
+                .image_view(data.textures[handle.0].as_ref().expect("validated PBR texture").image_view)
                 .sampler(data.texture_sampler)];
             let write = vk::WriteDescriptorSet::builder()
                 .dst_set(set)
@@ -300,7 +301,7 @@ pub unsafe fn create_material_descriptor_sets(
         data.material_descriptor_set_layout != vk::DescriptorSetLayout::null()
             && data.texture_sampler != vk::Sampler::null()
             && data.textures[first_texture_index..].iter()
-                .all(|texture| texture.image_view != vk::ImageView::null()),
+                .all(|texture| texture.as_ref().is_some_and(|texture| texture.image_view != vk::ImageView::null())),
         "Material descriptors require a layout, sampler and valid image views"
     );
 
@@ -359,7 +360,7 @@ pub unsafe fn create_material_descriptor_sets(
             let index = data.material_descriptor_sets.len();
             let images = [vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(data.textures[index].image_view)
+                .image_view(data.textures[index].as_ref().expect("validated material texture").image_view)
                 .sampler(data.texture_sampler)];
             let write = vk::WriteDescriptorSet::builder()
                 .dst_set(set)

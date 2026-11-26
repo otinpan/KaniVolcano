@@ -1,4 +1,4 @@
-use renderer_vulkan::{MeshHandle, SkyboxTextureHandle, Msaa};
+use renderer_vulkan::{MeshHandle, SkyboxTextureHandle, TextureHandle, Msaa};
 
 use crate::{EntityId, MeshAssetId, PrimitiveShape};
 
@@ -6,6 +6,9 @@ use crate::{EntityId, MeshAssetId, PrimitiveShape};
 pub enum RenderCommand {
     DestroyMesh {
         mesh: MeshHandle,
+    },
+    DestroyTexture{
+        texture: TextureHandle,
     },
     UpdatePrimitiveMesh {
         asset_id: MeshAssetId,
@@ -31,6 +34,10 @@ pub struct RenderCommandQueue {
 impl RenderCommandQueue {
     pub fn destroy_mesh(&mut self, mesh: MeshHandle) {
         self.commands.push(RenderCommand::DestroyMesh { mesh });
+    }
+
+    pub fn destroy_texture(&mut self, texture: TextureHandle) {
+        self.commands.push(RenderCommand::DestroyTexture {texture});
     }
 
     pub fn update_primitive_mesh(&mut self, asset_id: MeshAssetId, shape: PrimitiveShape) {

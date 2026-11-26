@@ -1,6 +1,6 @@
 use crate::{
     Component, ComponentPool, EntityId, MeshRenderer, RenderCommandQueue, Resources, World,
-    MeshAssetId, GltfModelRoot, ParentComponent,
+    MeshAssetId, GltfModelRoot, ParentComponent, PendingPrimitiveMesh,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -40,6 +40,14 @@ pub trait EntityApi {
         }
         // Descendants release their mesh references before the model's ownership reference.
         for current in order.into_iter().rev() {
+            let materials = [
+                self.world().get_component::<MeshRenderer>(current).map(|renderer| renderer.material),
+                self.world().get_component::<PendingPrimitiveMesh>(current).map(|pending| pending.material),
+            ];
+            for material in materials.into_iter().flatten() {
+                let handles = self.resources_mut().release_material_textures(&material);
+                self.render_commands_mut().defer_texture_destruction(handles);
+            }
             let mesh_id = self.world().get_component::<MeshRenderer>(current)
                 .and_then(|renderer| renderer.asset_id);
             if let Some(id) = mesh_id {
@@ -234,6 +242,48 @@ mod tests {
             mesh: MeshHandle::new(0, VertexLayout::Mesh3D),
             asset_id,
             material: Material::default(),
+        }
+    }
+
+    #[test]
+    fn despawn_releases_renderer_and_pending_texture_ownership() {
+        for auto_release in [false, true] {
+            let mut context = TestContext::default();
+            let handle = renderer_vulkan::TextureHandle(1);
+            let texture = context.resources.register_texture("shared", handle, auto_release).unwrap();
+            let material = Material { base_color_texture: Some(texture),
+                emissive_texture: Some(texture), ..Material::default() };
+            let root = context.spawn();
+            let child = context.spawn();
+            let unrelated = context.spawn();
+            for _ in 0..3 {
+                context.resources.retain_material_textures(&material).unwrap();
+            }
+            context.add_component(root, MeshRenderer { material, ..mesh_renderer(None) });
+            context.add_component(unrelated, MeshRenderer { material, ..mesh_renderer(None) });
+            context.add_component(child, ParentComponent::new(root));
+            context.add_component(child, PendingPrimitiveMesh {
+                shape: crate::PrimitiveShape::Sphere { radius: 1.0, rings: 8, segments: 8,
+                    color: material.base_color.truncate() },
+                material,
+                auto_release: true,
+            });
+            assert!(context.despawn(root));
+            assert_eq!(context.resources.texture_assets().next().unwrap().1.ref_count, 1);
+            assert!(context.render_commands.pending_texture_destroys().is_empty());
+            assert!(!context.despawn(root));
+            assert!(context.despawn(unrelated));
+            if auto_release {
+                assert!(context.resources.get_texture_handle(texture).is_none());
+                assert_eq!(context.render_commands.pending_texture_destroys(), &[handle]);
+            } else {
+                assert_eq!(context.resources.texture_assets().next().unwrap().1.ref_count, 0);
+                assert!(context.render_commands.pending_texture_destroys().is_empty());
+            }
+            assert!(!context.despawn(unrelated));
+            // Draining ordinary commands must not discard pending GPU cleanup.
+            assert_eq!(context.render_commands.drain().count(), 0);
+            assert_eq!(context.render_commands.pending_texture_destroys().len(), usize::from(auto_release));
         }
     }
 

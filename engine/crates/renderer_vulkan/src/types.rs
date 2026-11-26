@@ -77,7 +77,7 @@ pub struct VulkanData {
     pub in_flight_fences: Vec<vk::Fence>,
     pub images_in_flight: Vec<vk::Fence>,
     // Texture Image
-    pub textures: Vec<Texture>,
+    pub textures: Vec<Option<Texture>>,
     pub skybox_textures: Vec<Texture>,
     pub texture_sampler: vk::Sampler,
     // Depth
