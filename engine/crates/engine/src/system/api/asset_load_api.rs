@@ -19,9 +19,10 @@ pub trait AssetLoadApi{
         &mut self,
         name: &str,
         path: &str,
+        auto_release: bool,
     ){
         self.asset_load_commands_mut()
-            .request_load_texture(name,path);
+            .request_load_texture(name,path, auto_release);
     }
 
     fn request_load_skybox_texture(

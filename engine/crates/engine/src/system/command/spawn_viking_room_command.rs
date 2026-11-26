@@ -35,7 +35,7 @@ impl Command for SpawnVikingRoomCommand {
         let viking_room_mesh3d = context.model_asset_id("viking_room")?;
         let viking_room_debug_line = context.model_asset_id("viking_room_debug_line")?;
         let viking_room_lit3d = context.model_asset_id("viking_room_lit3d")?;
-        let viking_texture = context.texture("viking_room")?;
+        let viking_texture = context.texture_asset_id("viking_room")?;
         let viking_meshes = [
             viking_room_mesh3d,
             viking_room_debug_line,

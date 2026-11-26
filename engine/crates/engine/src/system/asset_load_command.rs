@@ -10,6 +10,7 @@ pub enum AssetLoadCommand{
     LoadTexture{
         name: String,
         path: String,
+        auto_release: bool,
     },
     LoadSkyboxTexture{
         name: String,
@@ -59,10 +60,12 @@ impl AssetLoadCommandQueue{
         &mut self,
         name: &str,
         path: &str,
+        auto_release: bool,
     ){
         self.commands.push(AssetLoadCommand::LoadTexture{
             name: name.to_string(),
             path: path.to_string(),
+            auto_release,
         });
     }
 

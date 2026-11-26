@@ -18,7 +18,6 @@ pub use super::asset_load_command::AssetLoadCommandQueue;
 pub use super::audio_command::AudioCommandQueue;
 pub use super::scene_command::SceneCommandQueue;
 pub use super::time_management::TimeManagementCommandQueue;
-use crate::app::DEFAULT_TEXTURE;
 use crate::component::{Material, Visibility};
 use crate::primitive::spawn_primitive_from_mesh;
 use crate::{
@@ -147,15 +146,13 @@ impl ObjectApi for UpdateContext<'_> {
         texture: Option<&str>,
         pipeline_key: PipelineKey,
     ) -> Result<Material> {
-        let use_texture = texture.is_some();
-        let texture = match texture {
-            Some(texture_name) => self.texture(texture_name)?,
-            None => DEFAULT_TEXTURE,
-        };
+        let texture = texture
+            .map(|name| self.texture_asset_id(name))
+            .transpose()?;
 
         Ok(Material {
             base_color: color.extend(alpha),
-            base_color_texture: use_texture.then_some(texture),
+            base_color_texture: texture,
             pipeline_key,
             ..Material::default()
         })

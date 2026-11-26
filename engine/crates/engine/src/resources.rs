@@ -37,6 +37,12 @@ pub struct TextureAsset{
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TextureAssetId(pub usize);
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GltfTextureAsset{
+    pub srgb: Option<TextureAssetId>,
+    pub linear: Option<TextureAssetId>,
+}
+
 #[derive(Debug)]
 pub struct FontAsset{
     pub handle: FontHandle,
@@ -80,7 +86,7 @@ pub struct GltfModelAsset{
     pub source: GltfModel,
     pub meshes: Vec<Vec<MeshAssetId>>,
     pub materials: Vec<Material>,
-    pub textures: Vec<GltfTextureHandle>, 
+    pub textures: Vec<GltfTextureAsset>,
     pub ref_count: usize,
     pub auto_release: bool,
 }
@@ -246,13 +252,25 @@ impl Resources {
         id
     }
 
-    // Increment mesh ref count
+    // Only for unnamed, unretained assets from a failed load. GPU cleanup is separate.
+    pub(crate) fn rollback_unpublished_texture_assets(
+        &mut self,
+        ids: impl Iterator<Item = TextureAssetId>,
+    ) {
+        for id in ids {
+            let slot = &mut self.texture_assets[id.0];
+            assert_eq!(slot.as_ref().expect("missing texture asset").ref_count, 0);
+            *slot = None;
+        }
+    }
+
+    // Increment mesh and texture ownership counts.
     pub fn insert_gltf_model_asset(
         &mut self,
         gltf_model: GltfModel,
         meshes: Vec<Vec<MeshAssetId>>,
         materials: Vec<Material>,
-        textures: Vec<GltfTextureHandle>,
+        textures: Vec<GltfTextureAsset>,
         auto_release: bool,
     ) -> Result<GltfModelAssetId>{
         // One ownership reference per distinct mesh, even when several
@@ -263,9 +281,20 @@ impl Resources {
                 .ok_or_else(|| anyhow::anyhow!("mesh asset not found: {mesh:?}"))?;
             anyhow::ensure!(asset.ref_count < usize::MAX, "mesh reference count exhausted: {mesh:?}");
         }
+        let owned_textures: HashSet<_> = textures.iter()
+            .flat_map(|texture| [texture.srgb, texture.linear])
+            .flatten().collect();
+        for texture in &owned_textures {
+            let asset = self.texture_assets.get(texture.0).and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("texture asset not found: {texture:?}"))?;
+            anyhow::ensure!(asset.ref_count < usize::MAX, "texture reference count exhausted: {texture:?}");
+        }
         for mesh in owned {
             // increment mesh reference count
             self.retain_mesh(mesh);
+        }
+        for texture in owned_textures {
+            self.retain_texture(texture);
         }
 
         // insert gltf model
@@ -335,7 +364,7 @@ impl Resources {
         gltf_model: GltfModel,
         mesh_handles: Vec<Vec<MeshHandle>>,
         materials: Vec<Material>,
-        textures: Vec<GltfTextureHandle>,
+        textures: Vec<GltfTextureAsset>,
         auto_release: bool,
     ) -> Result<GltfModelAssetId>{
         let name = name.into();
@@ -483,6 +512,17 @@ impl Resources {
             })
     }
 
+    pub fn texture_assets(&self) -> impl Iterator<Item=(TextureAssetId, &TextureAsset)>{
+        self.texture_assets
+            .iter()
+            .enumerate()
+            .filter_map(|(index, texture_asset) | {
+                texture_asset
+                    .as_ref()
+                    .map(|texture_asset| (TextureAssetId(index), texture_asset))
+            })
+    }
+
     // font
     pub fn font_assets(&self) -> impl Iterator<Item=(FontAssetId, &FontAsset)>{
         self.font_assets
@@ -568,6 +608,36 @@ impl Resources {
         Some(asset.handle)
     }
 
+    fn material_texture_ids(material: &Material) -> [Option<TextureAssetId>; 5] {
+        let mut ids = [
+            material.base_color_texture,
+            material.metallic_roughness_texture,
+            material.normal_texture,
+            material.emissive_texture,
+            material.occlusion_texture,
+        ];
+        for i in 1..ids.len() {
+            if ids[..i].contains(&ids[i]) {
+                ids[i] = None;
+            }
+        }
+        ids
+    }
+
+    /// Retains one reference per distinct texture. Errors leave all counts unchanged.
+    pub fn retain_material_textures(&mut self, material: &Material) -> Result<()> {
+        let ids = Self::material_texture_ids(material);
+        for id in ids.into_iter().flatten() {
+            let asset = self.texture_assets.get(id.0).and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("texture asset not found: {id:?}"))?;
+            anyhow::ensure!(asset.ref_count < usize::MAX, "texture reference count exhausted: {id:?}");
+        }
+        for id in ids.into_iter().flatten() {
+            self.retain_texture(id);
+        }
+        Ok(())
+    }
+
     pub fn retain_gltf_model(&mut self, id: GltfModelAssetId) -> Result<()>{
         let model=self.gltf_model_assets
             .get_mut(id.0)
@@ -635,6 +705,14 @@ impl Resources {
         None
     }
 
+    /// Releases one reference per distinct texture; GPU destruction is left to the caller.
+    #[must_use = "returned texture handles must be destroyed by the renderer"]
+    pub fn release_material_textures(&mut self, material: &Material) -> Vec<TextureHandle> {
+        Self::material_texture_ids(material).into_iter().flatten()
+            .filter_map(|id| self.release_texture(id))
+            .collect()
+    }
+
 
 }
 
@@ -666,6 +744,57 @@ impl Default for Resources {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn material_textures_share_ownership_and_release_once() {
+        let mut resources = Resources::default();
+        let shared = resources.register_texture("shared", TextureHandle(7), true).unwrap();
+        let persistent = resources.insert_texture_asset(TextureHandle(8), false);
+        let material = Material {
+            base_color_texture: Some(shared),
+            metallic_roughness_texture: Some(shared),
+            normal_texture: Some(persistent),
+            emissive_texture: Some(shared),
+            occlusion_texture: Some(persistent),
+            ..Material::default()
+        };
+        resources.retain_material_textures(&material).unwrap();
+        resources.retain_material_textures(&material).unwrap();
+        assert_eq!(resources.texture_assets[shared.0].as_ref().unwrap().ref_count, 2);
+        assert_eq!(resources.texture_assets[persistent.0].as_ref().unwrap().ref_count, 2);
+        assert!(resources.release_material_textures(&material).is_empty());
+        assert_eq!(resources.release_material_textures(&material), vec![TextureHandle(7)]);
+        assert!(resources.get_texture_handle(shared).is_none());
+        assert!(resources.texture_asset_id("shared").is_none());
+        assert_eq!(resources.get_texture_handle(persistent), Some(TextureHandle(8)));
+        assert_eq!(resources.texture_assets[persistent.0].as_ref().unwrap().ref_count, 0);
+    }
+
+    #[test]
+    fn material_texture_retain_errors_do_not_change_counts() {
+        let mut resources = Resources::default();
+        let valid = resources.insert_texture_asset(TextureHandle(1), true);
+        let exhausted = resources.insert_texture_asset(TextureHandle(2), true);
+        resources.texture_assets[exhausted.0].as_mut().unwrap().ref_count = usize::MAX;
+        for invalid in [TextureAssetId(99), exhausted] {
+            let material = Material {
+                base_color_texture: Some(valid),
+                occlusion_texture: Some(invalid),
+                ..Material::default()
+            };
+            assert!(resources.retain_material_textures(&material).is_err());
+            assert_eq!(resources.texture_assets[valid.0].as_ref().unwrap().ref_count, 0);
+            assert_eq!(resources.texture_assets[exhausted.0].as_ref().unwrap().ref_count, usize::MAX);
+        }
+    }
+
+    #[test]
+    fn material_without_textures_needs_no_ownership() {
+        let mut resources = Resources::default();
+        resources.retain_material_textures(&Material::default()).unwrap();
+        assert!(resources.release_material_textures(&Material::default()).is_empty());
+        assert!(resources.texture_assets.is_empty());
+    }
+
     use super::*;
     use renderer_vulkan::{FontHandle};
 
@@ -824,15 +953,22 @@ mod tests {
     fn model_keeps_mesh_alive_after_last_entity_and_allows_respawn() {
         let mut resources = Resources::default();
         let materials = vec![Material { metallic: 0.25, ..Material::default() }];
+        let srgb = resources.insert_texture_asset(TextureHandle(7), true);
+        let linear = resources.insert_texture_asset(TextureHandle(8), true);
         let textures = vec![
-            GltfTextureHandle { srgb: Some(TextureHandle(7)), linear: None },
-            GltfTextureHandle { srgb: None, linear: Some(TextureHandle(8)) },
-            GltfTextureHandle { srgb: Some(TextureHandle(7)), linear: None },
+            GltfTextureAsset { srgb: Some(srgb), linear: None },
+            GltfTextureAsset { srgb: None, linear: Some(linear) },
+            GltfTextureAsset { srgb: Some(srgb), linear: None },
         ];
         let model = resources.register_gltf_model("character", empty_gltf_model(),
             vec![vec![mesh_handle(3)]], materials.clone(), textures.clone(), true).unwrap();
         assert_eq!(resources.gltf_model_assets[model.0].as_ref().unwrap().materials, materials);
         assert_eq!(resources.gltf_model_assets[model.0].as_ref().unwrap().textures, textures);
+        assert_eq!(resources.get_texture_handle(srgb), Some(TextureHandle(7)));
+        assert_eq!(resources.get_texture_handle(linear), Some(TextureHandle(8)));
+        // Repeated glTF texture references contribute only one ownership reference.
+        assert_eq!(resources.texture_assets[srgb.0].as_ref().unwrap().ref_count, 1);
+        assert_eq!(resources.texture_assets[linear.0].as_ref().unwrap().ref_count, 1);
         let mesh = resources.gltf_model_assets[model.0].as_ref().unwrap().meshes[0][0];
         assert_eq!(mesh_asset(&resources, mesh).ref_count, 1);
         resources.retain_mesh(mesh);

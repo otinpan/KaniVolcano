@@ -31,7 +31,7 @@ enum PreparedModel {
 
 enum PreparedAsset {
     Model(PreparedModel, bool),
-    Texture(DecodedTexture),
+    Texture(DecodedTexture, bool),
     SkyboxTexture(DecodedTexture),
     Font(Vec<u8>),
     Audio(DecodedAudio),
@@ -67,8 +67,8 @@ fn prepare_asset(command: AssetLoadCommand) -> CompletedAssetLoad {
                 };
                 Ok(PreparedAsset::Model(model, auto_release))
             }
-            AssetLoadCommand::LoadTexture { path, .. } => {
-                Ok(PreparedAsset::Texture(decode_texture(&path).with_context(|| format!("texture: {path}"))?))
+            AssetLoadCommand::LoadTexture { path, auto_release, .. } => {
+                Ok(PreparedAsset::Texture(decode_texture(&path).with_context(|| format!("texture: {path}"))?, auto_release))
             }
             AssetLoadCommand::LoadSkyboxTexture { paths, .. } => {
                 Ok(PreparedAsset::SkyboxTexture(decode_skybox_texture(std::array::from_fn(|i| paths[i].as_str()))?))
@@ -171,8 +171,8 @@ unsafe fn register_asset(
     audio_system: &mut AudioSystem,
     resources: &mut Resources, 
     name: &str,
-    asset: PreparedAsset) -> Result<()> 
-{
+    asset: PreparedAsset
+) -> Result<()> {
     match asset {
         PreparedAsset::Model(model, auto_release) => {
             anyhow::ensure!(resources.model_asset_id(name).is_none(), "model already registered: {name}");
@@ -183,10 +183,10 @@ unsafe fn register_asset(
             };
             resources.register_model(name, handle, auto_release);
         }
-        PreparedAsset::Texture(image) => {
-            anyhow::ensure!(resources.get_texture_handle(name).is_none(), "texture already registered: {name}");
+        PreparedAsset::Texture(image, auto_release) => {
+            anyhow::ensure!(resources.texture_asset_id(name).is_none(), "texture already registered: {name}");
             let handle = renderer.upload_decoded_texture(&image)?;
-            resources.register_texture(name, handle);
+            resources.register_texture(name, handle, auto_release)?;
         }
         PreparedAsset::SkyboxTexture(image) => {
             anyhow::ensure!(resources.skybox_texture(name).is_none(), "skybox already registered: {name}");
@@ -273,9 +273,12 @@ mod tests {
     fn texture_and_cubemap_are_decoded_without_renderer() {
         let path = fixture("assets/textures/texture.png");
         let image = match prepare_asset(AssetLoadCommand::LoadTexture {
-            name: "image".into(), path: path.clone(),
+            name: "image".into(), path: path.clone(), auto_release: true,
         }).result.unwrap() {
-            PreparedAsset::Texture(image) => image,
+            PreparedAsset::Texture(image, auto_release) => {
+                assert!(auto_release);
+                image
+            }
             _ => panic!("expected texture"),
         };
         assert_eq!(image.pixels.len(), image.width as usize * image.height as usize * 4);
@@ -293,6 +296,23 @@ mod tests {
                     }
                 }
                 _ => panic!("expected cubemap"),
+            }
+        }
+    }
+
+    #[test]
+    fn texture_requests_preserve_auto_release() {
+        let mut queue = AssetLoadCommandQueue::default();
+        let path = fixture("assets/textures/texture.png");
+        for auto_release in [false, true] {
+            queue.request_load_texture("image", &path, auto_release);
+        }
+        let commands: Vec<_> = queue.drain().collect();
+        assert_eq!(commands.len(), 2);
+        for (command, expected) in commands.into_iter().zip([false, true]) {
+            match prepare_asset(command).result.unwrap() {
+                PreparedAsset::Texture(_, auto_release) => assert_eq!(auto_release, expected),
+                _ => panic!("expected texture"),
             }
         }
     }

@@ -1,12 +1,11 @@
-use crate::app::{DEFAULT_SKYBOX_TEXTURE, DEFAULT_TEXTURE};
+use crate::app::DEFAULT_SKYBOX_TEXTURE;
 use crate::{
     MeshAsset, MeshAssetId, PrimitiveType, RenderCommandApi, Resources,
     FontAsset, FontAssetId, AudioAsset, AudioAssetId, AudioEmitterResource, 
-    AudioEmitterId, AudioBusResource, AudioBusId, GltfModelAssetId,
+    AudioEmitterId, AudioBusResource, AudioBusId, GltfModelAssetId, TextureAssetId, TextureAsset,
 };
 use anyhow::{Result, anyhow};
-use renderer_vulkan::{SkyboxTextureHandle, TextureHandle, VertexLayout};
-use winit::keyboard::Key::Named;
+use renderer_vulkan::{SkyboxTextureHandle, VertexLayout};
 
 pub trait AssetApi {
     fn resources(&self) -> &Resources;
@@ -30,6 +29,14 @@ pub trait AssetApi {
         Ok(asset_id)
     }
 
+    /// Looks up a texture asset without retaining it. Use `None` in Material
+    /// when no texture is needed.
+    fn texture_asset_id(&self, texture_name: &str) -> Result<TextureAssetId> {
+        self.resources()
+            .texture_asset_id(texture_name)
+            .ok_or_else(|| anyhow!("texture not found: {texture_name}"))
+    }
+
     // return a MeshAssetId that match (primitive_type, vertex_layout)
     fn primitive_asset_id(
         &self,
@@ -38,12 +45,6 @@ pub trait AssetApi {
     ) -> Option<MeshAssetId> {
         self.resources()
             .primitive_asset_id(primitive_type, vertex_layout)
-    }
-
-    fn texture(&self, texture_name: &str) -> Result<TextureHandle> {
-        self.resources()
-            .get_texture_handle(texture_name)
-            .ok_or_else(|| anyhow!("texture not found: {texture_name}"))
     }
 
     fn set_skybox(&mut self, texture_name: &str) -> Result<()>
@@ -65,10 +66,6 @@ pub trait AssetApi {
         Ok(())
     }
 
-    fn default_texture(&self) -> TextureHandle {
-        DEFAULT_TEXTURE
-    }
-
     fn default_skybox_texture(&self) -> SkyboxTextureHandle {
         DEFAULT_SKYBOX_TEXTURE
     }
@@ -83,6 +80,10 @@ pub trait AssetApi {
 
     fn mesh_assets(&self) -> impl Iterator<Item = (MeshAssetId, &MeshAsset)> {
         self.resources().mesh_assets()
+    }
+
+    fn texture_assets(&self) -> impl Iterator<Item = (TextureAssetId, &TextureAsset)> {
+        self.resources().texture_assets()
     }
 
     // font_asset

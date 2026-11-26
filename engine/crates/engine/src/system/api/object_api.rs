@@ -16,6 +16,78 @@ use crate::{
 pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec2 = cgmath::Vector2<f32>;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Input, Resources, SceneContext, SceneId, Scheduler, Time, World, TextureAssetId};
+    use kani_volcano_animation::{GltfModel, ModelScene, ModelNode, ModelMesh, ModelPrimitive};
+    use renderer_vulkan::{MeshHandle, TextureHandle, VertexLayout};
+
+    fn with_context(test: impl FnOnce(&mut SceneContext<'_>)) {
+        let mut world = World::default();
+        let mut resources = Resources::default();
+        let mut scheduler = Scheduler::default();
+        let input = Input::default();
+        let time = Time::default();
+        test(&mut SceneContext::new(SceneId(1), &mut world, &input, &time,
+            &mut resources, &mut scheduler));
+    }
+
+    fn texture_count(context: &SceneContext<'_>, id: TextureAssetId) -> usize {
+        AssetApi::resources(context).texture_assets().find(|(key, _)| *key == id).unwrap().1.ref_count
+    }
+
+    #[test]
+    fn model_spawn_retains_textures_only_after_validation() {
+        with_context(|context| {
+            let resources = AssetApi::resources_mut(context);
+            let mesh = resources.register_model("model", MeshHandle::new(0, VertexLayout::Lit3D), true);
+            let texture = resources.insert_texture_asset(TextureHandle(1), true);
+            let material = Material { base_color_texture: Some(texture),
+                emissive_texture: Some(texture), ..Material::default() };
+            let invalid = Material { normal_texture: Some(TextureAssetId(99)), ..material };
+            assert!(context.spawn_model("model", Transform::default(), invalid).is_err());
+            let resources = AssetApi::resources(context);
+            assert_eq!(resources.mesh_assets().find(|(id, _)| *id == mesh).unwrap().1.ref_count, 0);
+            assert_eq!(texture_count(context, texture), 0);
+            assert_eq!(context.query1::<MeshRenderer>().count(), 0);
+            context.spawn_model("model", Transform::default(), material).unwrap();
+            assert_eq!(texture_count(context, texture), 1);
+            assert_eq!(context.query1::<MeshRenderer>().count(), 1);
+        });
+    }
+
+    #[test]
+    fn gltf_spawn_retains_per_primitive_and_rolls_back_invalid_textures() {
+        with_context(|context| {
+            let resources = AssetApi::resources_mut(context);
+            let texture = resources.insert_texture_asset(TextureHandle(1), true);
+            let material = Material { base_color_texture: Some(texture),
+                emissive_texture: Some(texture), ..Material::default() };
+            let source = GltfModel {
+                scenes: vec![ModelScene { roots: vec![0], ..Default::default() }],
+                nodes: vec![ModelNode { mesh: Some(0), ..Default::default() }],
+                meshes: vec![ModelMesh { primitives: (0..2).map(|_| ModelPrimitive {
+                    material: Some(0), ..Default::default()
+                }).collect(), ..Default::default() }],
+                ..Default::default()
+            };
+            let model = resources.register_gltf_model("model", source,
+                vec![vec![MeshHandle::new(0, VertexLayout::Lit3D), MeshHandle::new(1, VertexLayout::Lit3D)]],
+                vec![material], vec![crate::resources::GltfTextureAsset { srgb: Some(texture), linear: None }], true).unwrap();
+            let invalid = Material { normal_texture: Some(TextureAssetId(99)), ..material };
+            assert!(context.spawn_gltf_model("model", Transform::default(), Some(invalid)).is_err());
+            assert_eq!(texture_count(context, texture), 1);
+            assert_eq!(context.query1::<MeshRenderer>().count(), 0);
+            assert_eq!(AssetApi::resources(context).gltf_model_asset(model).unwrap().ref_count, 0);
+            context.spawn_gltf_model("model", Transform::default(), None).unwrap();
+            assert_eq!(texture_count(context, texture), 3);
+            context.spawn_gltf_model("model", Transform::default(), Some(material)).unwrap();
+            assert_eq!(texture_count(context, texture), 5);
+        });
+    }
+}
+
 fn spawn_gltf_node<A: EntityApi + ?Sized>(
     api: &mut A,
     model_id: GltfModelAssetId,
@@ -183,17 +255,17 @@ pub trait ObjectApi: EntityApi + AssetApi {
     ) -> Result<EntityId> {
         let asset_id = self.model_asset_id(model_name)?;
 
-        let mesh = AssetApi::resources_mut(self)
-            .retain_mesh(asset_id)
+        let mesh = AssetApi::resources(self)
+            .get_mesh_handle(asset_id)
             .ok_or_else(|| anyhow!("mesh asset not found: {asset_id:?}"))?;
 
-        let mesh_renderer = match MeshRenderer::new(mesh, material) {
-            Ok(mesh_renderer) => mesh_renderer.with_asset_id(asset_id),
-            Err(error) => {
-                AssetApi::resources_mut(self).release_mesh(asset_id);
-                return Err(error);
-            }
-        };
+        let mesh_renderer = MeshRenderer::new(mesh, material)?.with_asset_id(asset_id);
+        let resources = AssetApi::resources_mut(self);
+        let count = resources.mesh_assets().find(|(id, _)| *id == asset_id)
+            .context("Mesh asset not found")?.1.ref_count;
+        ensure!(count < usize::MAX, "Mesh reference count exhausted");
+        resources.retain_material_textures(&material)?;
+        resources.retain_mesh(asset_id);
 
         let entity = self.spawn();
 
@@ -231,7 +303,42 @@ pub trait ObjectApi: EntityApi + AssetApi {
             for node in roots {
                 spawn_gltf_node(self, asset_id, node, root, material, &mut created, &mut visited)?;
             }
-            AssetApi::resources_mut(self).retain_gltf_model(asset_id)
+            // Validate the whole instance before retaining any textures, so a failed
+            // spawn does not release (and auto-remove) caller-owned texture assets.
+            let mut texture_counts = std::collections::HashMap::<crate::TextureAssetId, usize>::new();
+            for &entity in &created {
+                if let Some(renderer) = self.get_component::<MeshRenderer>(entity) {
+                    let material = &renderer.material;
+                    let ids = [material.base_color_texture, material.metallic_roughness_texture,
+                        material.normal_texture, material.emissive_texture, material.occlusion_texture];
+                    for (index, id) in ids.iter().enumerate() {
+                        if let Some(id) = id {
+                            if !ids[..index].contains(&Some(*id)) {
+                                let count = texture_counts.entry(*id).or_default();
+                                *count = count.checked_add(1).context("Texture reference count exhausted")?;
+                            }
+                        }
+                    }
+                }
+            }
+            if !texture_counts.is_empty() {
+                for (id, asset) in AssetApi::resources(self).texture_assets() {
+                    if let Some(count) = texture_counts.remove(&id) {
+                        ensure!(asset.ref_count.checked_add(count).is_some(), "Texture reference count exhausted: {id:?}");
+                    }
+                    if texture_counts.is_empty() { break; }
+                }
+                ensure!(texture_counts.is_empty(), "Texture asset not found");
+            }
+            AssetApi::resources_mut(self).retain_gltf_model(asset_id)?;
+            for &entity in &created {
+                if let Some(material) = self.get_component::<MeshRenderer>(entity).map(|renderer| renderer.material) {
+                    // All IDs and cumulative increments were validated above.
+                    AssetApi::resources_mut(self).retain_material_textures(&material)
+                        .expect("validated texture ownership");
+                }
+            }
+            Ok(())
         })();
         if let Err(error) = result {
             for entity in created.into_iter().rev() {

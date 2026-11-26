@@ -32,14 +32,13 @@ impl Command for CreatePrimitiveCommand {
     }
 
     fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
-        let texture = match self.texture {
-            Some(name) => context.texture(name)?,
-            None => context.default_texture(),
-        };
+        let texture = self.texture
+            .map(|name| context.texture_asset_id(name))
+            .transpose()?;
 
         let material = Material {
             base_color: self.color.extend(self.alpha),
-            base_color_texture: self.texture.is_some().then_some(texture),
+            base_color_texture: texture,
             pipeline_key: self.pipeline_key,
             ..Material::default()
         };

@@ -2,7 +2,7 @@ use anyhow::{Result, Context, anyhow};
 use cgmath::{vec2, vec3};
 use renderer_vulkan::{
     MeshHandle, SkyboxTextureHandle, TextureHandle, TextureColorSpace, VertexLayout, VulkanRenderer,
-    Msaa, 
+    Msaa,
 };
 use kani_volcano_audio::{
     AudioSystem,
@@ -12,8 +12,9 @@ use kani_volcano_animation::{
 };
 use winit::event::WindowEvent;
 use winit::window::Window;
+use std::collections::HashMap;
+use crate::resources::GltfTextureAsset;
 
-pub const DEFAULT_TEXTURE: TextureHandle = TextureHandle(0);
 pub const DEFAULT_SKYBOX_TEXTURE: SkyboxTextureHandle = SkyboxTextureHandle(0);
 
 use crate::primitive::{
@@ -24,7 +25,7 @@ use crate::primitive::{
 use crate::{
     MeshAssetId, PipelineKey, Scene, SceneCommand, SceneCommandQueue, SceneContext, SceneId,
     UpdateContext, FontAssetId, AudioAssetId, TimeManager, TimeManagementApi, TimeManagementCommandQueue,
-    GltfModelAssetId, Material,
+    GltfModelAssetId, Material, TextureAssetId,
 };
 
 use super::{Input, Resources, SceneManager, Scheduler, Time, World};
@@ -380,6 +381,22 @@ impl App {
         };
 
 
+        // Register each GPU image once, preserving glTF texture indices.
+        let mut texture_ids = HashMap::new();
+        let textures: Vec<GltfTextureAsset> = texture_handles.iter().map(|texture| {
+            let mut register = |handle| {
+                *texture_ids.entry(handle).or_insert_with(|| {
+                    // not use register_texture, because it do not needed to register name
+                    // textures used in gltf do not have name
+                    self.resources.insert_texture_asset(handle, auto_release)
+                })
+            };
+            GltfTextureAsset {
+                srgb: texture.srgb.map(&mut register),
+                linear: texture.linear.map(&mut register),
+            }
+        }).collect();
+
         // convert material
         let materials: Vec<Material> = gltf_model.materials
             .iter()
@@ -388,29 +405,30 @@ impl App {
                 // The loader validates references and returns handles in glTF texture order.
                 material.base_color_texture = source.base_color_texture
                     .as_ref()
-                    .and_then(|reference| texture_handles[reference.texture].srgb);
+                    .and_then(|reference| textures[reference.texture].srgb);
                 material.emissive_texture = source.emissive_texture
                     .as_ref()
-                    .and_then(|reference| texture_handles[reference.texture].srgb);
+                    .and_then(|reference| textures[reference.texture].srgb);
                 material.normal_texture = source.normal_texture
                     .as_ref()
-                    .and_then(|reference| texture_handles[reference.texture].linear);
+                    .and_then(|reference| textures[reference.texture].linear);
                 material.metallic_roughness_texture = source.metallic_roughness_texture
                     .as_ref()
-                    .and_then(|reference| texture_handles[reference.texture].linear);
+                    .and_then(|reference| textures[reference.texture].linear);
                 material.occlusion_texture = source.occlusion_texture
                     .as_ref()
                     .filter(|reference| reference.tex_coord==0)
-                    .and_then(|reference| texture_handles[reference.texture].linear);
+                    .and_then(|reference| textures[reference.texture].linear);
                 material
             })
             .collect();
 
 
         // register model
-        match self.resources.register_gltf_model(name, gltf_model, mesh_handles.clone(), materials, texture_handles.clone(), auto_release) {
+        match self.resources.register_gltf_model(name, gltf_model, mesh_handles.clone(), materials, textures, auto_release) {
             Ok(id) => Ok(id),
             Err(error) => {
+                self.resources.rollback_unpublished_texture_assets(texture_ids.into_values());
                 let mut failures = Vec::new();
                 if let Err(cleanup) = self.release_meshes(&mesh_handles) {
                     failures.push(format!("mesh cleanup: {cleanup:#}"));
@@ -434,10 +452,11 @@ impl App {
         Ok(())
     }
 
-    pub unsafe fn load_texture(&mut self, name: &str, path: &str) -> Result<TextureHandle> {
+    pub unsafe fn load_texture(&mut self, name: &str, path: &str, auto_release: bool) -> Result<TextureAssetId> {
+        anyhow::ensure!(self.resources.texture_asset_id(name).is_none(), "texture already registered: {name}");
         let handle = self.renderer.load_texture(path)?;
 
-        Ok(self.resources.register_texture(name, handle))
+        self.resources.register_texture(name, handle, auto_release)
     }
 
     pub unsafe fn load_texture_with_color_space(
@@ -445,10 +464,12 @@ impl App {
         name: &str,
         path: &str,
         color_space: TextureColorSpace,
-    ) -> Result<TextureHandle> {
+        auto_release: bool,
+    ) -> Result<TextureAssetId> {
+        anyhow::ensure!(self.resources.texture_asset_id(name).is_none(), "texture already registered: {name}");
         let handle = self.renderer.load_texture_with_color_space(path, color_space)?;
 
-        Ok(self.resources.register_texture(name, handle))
+        self.resources.register_texture(name, handle, auto_release)
     }
 
     pub fn create_skybox(&mut self, half_size: f32) -> Result<()> {

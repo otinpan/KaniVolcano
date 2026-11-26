@@ -25,10 +25,9 @@ impl Command for SpawnPrimitiveCommand {
     fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
         let position = mouse_position_on_spawn_plane(context);
 
-        let texture = match self.texture_name {
-            Some(name) => context.texture(name)?,
-            None => context.default_texture(),
-        };
+        let texture = self.texture_name
+            .map(|name| context.texture_asset_id(name))
+            .transpose()?;
 
         let asset_id = context
             .primitive_asset_id(
@@ -41,7 +40,7 @@ impl Command for SpawnPrimitiveCommand {
             asset_id,
             Material {
                 base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
-                base_color_texture: self.texture_name.is_some().then_some(texture),
+                base_color_texture: texture,
                 pipeline_key: self.pipeline_key,
                 ..Default::default()
             },
