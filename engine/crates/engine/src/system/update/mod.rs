@@ -85,6 +85,7 @@ impl<'a> UpdateContext<'a> {
         material: Material,
         auto_release: bool,
     ) -> Result<EntityId> {
+        self.resources.retain_material_textures(&material)?;
         let entity = self.spawn();
 
         self.add_component(entity, transform);

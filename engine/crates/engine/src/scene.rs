@@ -141,6 +141,7 @@ impl<'a> SceneContext<'a> {
         material: Material,
         auto_release: bool,
     ) -> Result<EntityId> {
+        self.resources.retain_material_textures(&material)?;
         let entity = self.spawn();
 
         self.add_component(entity, transform);
@@ -264,6 +265,31 @@ impl AudioApi for SceneContext<'_>{
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_primitive_retains_textures_before_mesh_creation() {
+        let mut world = World::default();
+        let input = Input::default();
+        let time = Time::default();
+        let mut resources = Resources::default();
+        let mut scheduler = Scheduler::default();
+        let texture = resources.insert_texture_asset(renderer_vulkan::TextureHandle(1), true);
+        let mut context = SceneContext::new(
+            SceneId(1), &mut world, &input, &time, &mut resources, &mut scheduler,
+        );
+        let material = Material { base_color_texture: Some(texture),
+            emissive_texture: Some(texture), ..Material::default() };
+        let shape = PrimitiveShape::Sphere { radius: 1.0, rings: 8, segments: 8,
+            color: material.base_color.truncate() };
+        let invalid = Material { normal_texture: Some(crate::TextureAssetId(99)), ..material };
+        assert!(context.enqueue_spawn_shape(shape.clone(), Transform::default(), invalid, true).is_err());
+        assert_eq!(context.query1::<PendingPrimitiveMesh>().count(), 0);
+        assert_eq!(context.resources.texture_assets().find(|(id, _)| *id == texture).unwrap().1.ref_count, 0);
+        let entity = context.enqueue_spawn_shape(shape, Transform::default(), material, true).unwrap();
+        assert!(context.has_component::<PendingPrimitiveMesh>(entity));
+        assert!(!context.has_component::<crate::MeshRenderer>(entity));
+        assert_eq!(context.resources.texture_assets().find(|(id, _)| *id == texture).unwrap().1.ref_count, 1);
+    }
 
     #[test]
     fn set_material_updates_renderers_and_pending_primitives() {

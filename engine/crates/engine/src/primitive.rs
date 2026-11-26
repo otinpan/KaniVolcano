@@ -614,10 +614,12 @@ pub fn spawn_primitive_from_mesh(
     transform: Transform,
 ) -> Result<EntityId> {
     let mesh = resources
-        .retain_mesh(asset_id)
+        .get_mesh_handle(asset_id)
         .ok_or_else(|| anyhow!("mesh asset not found: {asset_id:?}"))?;
     let mesh_renderer = MeshRenderer::new(mesh, material)?;
     let mesh_renderer = mesh_renderer.with_asset_id(asset_id);
+    resources.retain_material_textures(&material)?;
+    resources.retain_mesh(asset_id);
     let entity = world.spawn();
 
     let added_transform = world.add_component(entity, transform);
@@ -1158,6 +1160,28 @@ mod tests {
 
         assert!(source.vertices.is_empty());
         assert!(source.indices.is_empty());
+    }
+
+    #[test]
+    fn primitive_spawn_retains_textures_only_after_validation() {
+        let mut world = World::default();
+        let mut resources = Resources::default();
+        let mesh = resources.insert_mesh_asset(MeshHandle::new(0, VertexLayout::Mesh3D), true);
+        let texture = resources.insert_texture_asset(renderer_vulkan::TextureHandle(1), true);
+        let material = Material {
+            pipeline_key: renderer_vulkan::PipelineKey::Mesh3D,
+            base_color_texture: Some(texture),
+            emissive_texture: Some(texture),
+            ..Material::default()
+        };
+        let invalid = Material { normal_texture: Some(crate::TextureAssetId(99)), ..material };
+        assert!(spawn_primitive_from_mesh(&mut world, &mut resources, mesh, invalid, Transform::default()).is_err());
+        assert_eq!(resources.mesh_assets().find(|(id, _)| *id == mesh).unwrap().1.ref_count, 0);
+        assert_eq!(resources.texture_assets().find(|(id, _)| *id == texture).unwrap().1.ref_count, 0);
+        assert_eq!(world.query1::<MeshRenderer>().count(), 0);
+        spawn_primitive_from_mesh(&mut world, &mut resources, mesh, material, Transform::default()).unwrap();
+        assert_eq!(resources.mesh_assets().find(|(id, _)| *id == mesh).unwrap().1.ref_count, 1);
+        assert_eq!(resources.texture_assets().find(|(id, _)| *id == texture).unwrap().1.ref_count, 1);
     }
 
     #[test]
