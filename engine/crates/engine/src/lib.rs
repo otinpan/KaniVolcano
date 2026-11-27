@@ -9,6 +9,7 @@
 mod app;
 mod component;
 mod ecs;
+mod gltf;
 mod input;
 mod primitive;
 mod resources;

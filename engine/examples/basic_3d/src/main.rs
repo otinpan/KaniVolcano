@@ -77,12 +77,6 @@ unsafe fn load_models(app: &mut App) -> Result<()> {
     )?;
 
     app.load_gltf_model(
-        "helmet",
-        "assets/models/helmet.glb",
-        true,
-    )?;
-
-    app.load_gltf_model(
         "car",
         "assets/models/car.glb",
         true,

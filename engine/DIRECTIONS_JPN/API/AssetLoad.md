@@ -15,13 +15,25 @@ context.request_load_model(
 );
 ```
 
+## glTF / GLB
+
+```rust
+context.request_load_gltf_model("car", "assets/models/car.glb", true);
+```
+
+引数は登録名、`.gltf`または`.glb`のパス、`auto_release`です。`PipelineKey`は内部で決定します。
+
+ファイル読み込みとglTF解析はワーカースレッドで行います。頂点変換・GPU転送・Material変換・登録はメインスレッドで行うため、大きなモデルでは登録時に時間がかかる場合があります。
+
+後続フレームで`context.gltf_model_asset_id("car").is_ok()`なら登録済みです。`spawn_gltf_model("car", transform, None)?`でインスタンスを作成できます。毎フレーム生成しないよう、生成済みかどうかを保持してください。ロード失敗時はログを確認します。
+
 ## Texture
 
 ```rust
 context.request_load_texture("jupiter", "assets/textures/jupiter.png", true);
 ```
 
-ModelとTextureの最後の引数は`auto_release`です。`true`なら最後の参照が外れたときに自動解放し、`false`なら保持します。未使用資産の明示解放は[Asset API](Asset.md)のunloadを使用します。名前からIDを取得するだけでは参照数は増えません。
+Model・glTF/GLB・Textureの最後の引数は`auto_release`です。`true`なら最後の参照が外れたときに自動解放し、`false`なら保持します。未使用資産の明示解放は[Asset API](Asset.md)のunloadを使用します。名前からIDを取得するだけでは参照数は増えません。
 
 ## Skybox
 
@@ -48,4 +60,4 @@ context.request_load_font("jpn_font", r"C:\Windows\Fonts\NotoSansJP-VF.ttf");
 context.request_load_audio("music", "assets/sounds/music.mp3");
 ```
 
-Skybox・Font・Audioには`auto_release`引数はありません。glTF/GLBの非同期ロードAPIはまだありません。
+Skybox・Font・Audioには`auto_release`引数はありません。

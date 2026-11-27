@@ -52,5 +52,16 @@ pub trait AssetLoadApi{
             .request_load_audio(name, path);
     }
 
+    fn request_load_gltf_model(
+        &mut self,
+        name: &str,
+        path: &str,
+        auto_release: bool
+    ){
+        self.asset_load_commands_mut()
+            .request_load_gltf_model(name, path, auto_release);
+
+    }
+
 
 }

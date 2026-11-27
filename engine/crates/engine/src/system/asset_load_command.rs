@@ -24,6 +24,11 @@ pub enum AssetLoadCommand{
         name: String,
         path: String,
     },
+    LoadGltfModel{
+        name: String,
+        path: String,
+        auto_release: bool,
+    }
 }
 
 
@@ -100,5 +105,18 @@ impl AssetLoadCommandQueue{
             name: name.to_string(),
             path: path.to_string(),
         });
+    }
+
+    pub fn request_load_gltf_model(
+        &mut self,
+        name: &str,
+        path: &str,
+        auto_release: bool,
+    ){
+        self.commands.push(AssetLoadCommand::LoadGltfModel{
+            name: name.to_string(),
+            path: path.to_string(),
+            auto_release
+        })
     }
 }

@@ -88,15 +88,6 @@ impl BasicFieldScene {
             None,
         );
 
-        let helmet=context.spawn_gltf_model(
-            "helmet",
-            Transform{
-                position: vec3(0.0,5.0,0.0),
-                rotation: vec3(90.0,0.0,0.0),
-                ..Default::default()
-            },
-            None,
-        );
         Ok(())
     }
 
@@ -273,6 +264,11 @@ impl Command for LoadAssetsCommand{
             PipelineKey::Lit3D,
             true,
         );
+        context.request_load_gltf_model(
+            "helmet",
+            "assets/models/helmet.glb",
+            true,
+        );
 
         Ok(())
     }
@@ -301,6 +297,17 @@ impl Command for SpawnTransparentVikingRoom{
                 ..Material::default()
             }
         )?;
+
+        context.spawn_gltf_model(
+            "helmet",
+            Transform{
+                position: vec3(0.0,5.0,0.0),
+                rotation: vec3(45.0,0.0,0.0),
+                scale: vec3(1.0,1.0,1.0),
+            },
+            None
+        )?;
+
         Ok(())
     }
 }

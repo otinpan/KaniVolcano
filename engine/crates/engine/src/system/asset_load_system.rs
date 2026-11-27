@@ -9,12 +9,14 @@ use renderer_vulkan::{
 use kani_volcano_audio::{
     DecodedAudio, AudioSystem
 };
-
-use crate::Resources;
+use kani_volcano_animation::{
+    GltfModel,
+};
+use crate::{Resources};
 use super::{AssetLoadCommand, AssetLoadCommandQueue};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AssetKind { Model, Texture, SkyboxTexture, Font, Audio }
+pub enum AssetKind { Model, Texture, SkyboxTexture, Font, Audio, GltfModel }
 
 /// One result per request, including failures. No GPU objects cross threads.
 pub struct AssetLoadOutcome {
@@ -35,6 +37,7 @@ enum PreparedAsset {
     SkyboxTexture(DecodedTexture),
     Font(Vec<u8>),
     Audio(DecodedAudio),
+    GltfModel(GltfModel, bool)
 }
 
 struct CompletedAssetLoad {
@@ -50,6 +53,7 @@ fn prepare_asset(command: AssetLoadCommand) -> CompletedAssetLoad {
         AssetLoadCommand::LoadSkyboxTexture { name, .. } => (AssetKind::SkyboxTexture, name.clone()),
         AssetLoadCommand::LoadFont { name, .. } => (AssetKind::Font, name.clone()),
         AssetLoadCommand::LoadAudio{name , ..} => (AssetKind::Audio, name.clone()),
+        AssetLoadCommand::LoadGltfModel{name, ..} => (AssetKind::GltfModel, name.clone()),
     };
     // A malformed asset must not kill the worker and strand later requests.
     let result = std::panic::catch_unwind(|| -> Result<PreparedAsset> {
@@ -78,6 +82,11 @@ fn prepare_asset(command: AssetLoadCommand) -> CompletedAssetLoad {
             }
             AssetLoadCommand::LoadAudio{path, ..} =>{
                 Ok(PreparedAsset::Audio(DecodedAudio::from_file(&path)?))
+            }
+            AssetLoadCommand::LoadGltfModel { path, auto_release, ..} => {
+                let model = kani_volcano_animation::load_gltf(&path)
+                    .with_context(|| format!("glTF model: {path}"))?;
+                Ok(PreparedAsset::GltfModel(model, auto_release))
             }
         }
     }).unwrap_or_else(|_| Err(anyhow!("asset preparation panicked")));
@@ -203,6 +212,9 @@ unsafe fn register_asset(
             let handle=audio_system.register_audio(audio)?;
             resources.register_audio(name,handle)?;
         }
+        PreparedAsset::GltfModel(model, auto_release) =>{
+            crate::gltf::upload_and_register_gltf_model(renderer, resources, name, model, auto_release)?;
+        }
     }
     Ok(())
 }
@@ -216,6 +228,57 @@ mod tests {
     fn fixture(path: &str) -> String {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..").join(path).to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn gltf_worker_loads_both_containers_after_a_failed_request() {
+        let dir = std::env::temp_dir().join(format!("kani-gltf-{}-{}",
+            std::process::id(), std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&dir).unwrap();
+        let json = br#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"translation":[1,2,3]}],"materials":[{"emissiveFactor":[0.2,0.3,0.4]}]}"#;
+        let gltf = dir.join("model.gltf");
+        let glb = dir.join("model.glb");
+        std::fs::write(&gltf, json).unwrap();
+        let mut chunk = json.to_vec();
+        while chunk.len() % 4 != 0 { chunk.push(b' '); }
+        let mut bytes = Vec::new();
+        for word in [0x46546c67u32, 2, (20 + chunk.len()) as u32, chunk.len() as u32, 0x4e4f534a] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        bytes.extend_from_slice(&chunk);
+        std::fs::write(&glb, bytes).unwrap();
+
+        let mut loader = AssetLoadSystem::new().unwrap();
+        let mut queue = AssetLoadCommandQueue::default();
+        queue.request_load_gltf_model("missing", &dir.join("missing.gltf").to_string_lossy(), true);
+        queue.request_load_gltf_model("gltf", &gltf.to_string_lossy(), false);
+        queue.request_load_gltf_model("glb", &glb.to_string_lossy(), true);
+        loader.load_asset_stage(&mut queue).unwrap();
+        let receiver = loader.completed_rx.as_ref().unwrap();
+        let failed = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(failed.kind, AssetKind::GltfModel);
+        assert_eq!(failed.name, "missing");
+        assert!(failed.result.is_err());
+        for (name, expected) in [("gltf", false), ("glb", true)] {
+            let completed = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(completed.kind, AssetKind::GltfModel);
+            assert_eq!(completed.name, name);
+            match completed.result.unwrap() {
+                PreparedAsset::GltfModel(model, auto_release) => {
+                    assert_eq!(auto_release, expected);
+                    assert_eq!(model.default_scene, Some(0));
+                    assert_eq!(model.scenes[0].roots, vec![0]);
+                    assert_eq!(model.nodes.len(), 1);
+                    assert_eq!(model.materials[0].emissive, [0.2, 0.3, 0.4]);
+                }
+                _ => panic!("expected glTF model"),
+            }
+        }
+        loader.shutdown().unwrap();
+        std::fs::remove_file(gltf).unwrap();
+        std::fs::remove_file(glb).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 
     #[test]

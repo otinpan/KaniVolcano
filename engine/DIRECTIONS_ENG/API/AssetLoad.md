@@ -15,13 +15,25 @@ context.request_load_model(
 );
 ```
 
+## glTF / GLB
+
+```rust
+context.request_load_gltf_model("car", "assets/models/car.glb", true);
+```
+
+Arguments are the registered name, the `.gltf` or `.glb` file path, and `auto_release`. The pipeline is selected internally.
+
+File loading and glTF parsing run on the worker thread. Vertex conversion, GPU upload, Material conversion, and registration run on the main thread, so registering large models may still take noticeable time.
+
+On a later frame, `context.gltf_model_asset_id("car").is_ok()` indicates that registration is complete. Create an instance with `spawn_gltf_model("car", transform, None)?`. Track whether it has been spawned to avoid creating an instance every frame. Check the logs if loading fails.
+
 ## Texture
 
 ```rust
 context.request_load_texture("jupiter", "assets/textures/jupiter.png", true);
 ```
 
-The last argument for Model and Texture is `auto_release`. `true` releases the asset when its last reference is removed; `false` keeps it loaded. Use the unload methods in [Asset API](Asset.md) to explicitly release unused assets. Looking up an ID by name does not retain it.
+The last argument for Model, glTF/GLB, and Texture is `auto_release`. `true` releases the asset when its last reference is removed; `false` keeps it loaded. Use the unload methods in [Asset API](Asset.md) to explicitly release unused assets. Looking up an ID by name does not retain it.
 
 ## Skybox
 
@@ -48,4 +60,4 @@ context.request_load_font("jpn_font", r"C:\Windows\Fonts\NotoSansJP-VF.ttf");
 context.request_load_audio("music", "assets/sounds/music.mp3");
 ```
 
-Skybox, Font, and Audio requests have no `auto_release` argument. Asynchronous glTF/GLB loading is not available yet.
+Skybox, Font, and Audio requests have no `auto_release` argument.
