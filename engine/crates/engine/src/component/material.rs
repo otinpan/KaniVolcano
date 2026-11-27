@@ -3,7 +3,6 @@ use anyhow::{Result, anyhow};
 use renderer_vulkan::{PipelineKey, RenderAlphaMode, RenderMaterial};
 use crate::{Resources, TextureAssetId};
 
-use super::Component;
 pub type Vec3 = Vector3<f32>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -115,7 +114,6 @@ impl Material {
     }
 }
 
-impl Component for Material {}
 
 
 

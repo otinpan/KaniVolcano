@@ -104,10 +104,11 @@ unsafe fn load_fonts(app: &mut App) -> Result<()>{
 }
 
 unsafe fn load_textures(app: &mut App) -> Result<()> {
-    app.load_texture("viking_room", "assets/textures/viking_room.png")?;
-    app.load_texture_with_color_space("face", "assets/textures/texture.png", TextureColorSpace::Linear)?;
-    app.load_texture("ghost", "assets/textures/ghost.png")?;
-    app.load_texture("escapee", "assets/textures/escapee.png")?;
+    app.load_texture("viking_room", "assets/textures/viking_room.png", false)?;
+    app.load_texture_with_color_space("face", "assets/textures/texture.png", TextureColorSpace::Linear, false)?;
+    app.load_texture("ghost", "assets/textures/ghost.png", false)?;
+    app.load_texture("texture_ref_test", "assets/textures/ghost.png", true)?;
+    app.load_texture("escapee", "assets/textures/escapee.png", false)?;
 
     Ok(())
 }

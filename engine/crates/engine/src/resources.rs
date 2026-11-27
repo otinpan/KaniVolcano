@@ -488,6 +488,29 @@ impl Resources {
             .map(|asset| asset.handle)
     }
 
+    /// Retain component ownership only after all of its assets have been validated.
+    pub(crate) fn retain_component_assets(&mut self, component: &dyn std::any::Any) -> Result<()> {
+        if let Some(renderer) = component.downcast_ref::<crate::MeshRenderer>() {
+            anyhow::ensure!(renderer.mesh.vertex_layout == renderer.material.pipeline_key.required_vertex_layout(),
+                "Material pipeline does not match mesh vertex layout");
+            if let Some(id) = renderer.asset_id {
+                let asset = self.mesh_assets.get(id.0).and_then(Option::as_ref)
+                    .ok_or_else(|| anyhow!("Mesh asset not found: {id:?}"))?;
+                anyhow::ensure!(asset.handle == renderer.mesh, "Mesh handle does not match asset: {id:?}");
+                anyhow::ensure!(asset.ref_count < usize::MAX, "Mesh reference count exhausted: {id:?}");
+            }
+            self.retain_material_textures(&renderer.material)?;
+            if let Some(id) = renderer.asset_id {
+                self.retain_mesh(id);
+            }
+        } else if let Some(pending) = component.downcast_ref::<crate::PendingPrimitiveMesh>() {
+            self.retain_material_textures(&pending.material)?;
+        } else if let Some(root) = component.downcast_ref::<crate::GltfModelRoot>() {
+            self.retain_gltf_model(root.model_id)?;
+        }
+        Ok(())
+    }
+
     pub fn get_texture_handle(&self, id: TextureAssetId) -> Option<TextureHandle>{
         self.texture_assets
             .get(id.0)?

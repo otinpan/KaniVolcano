@@ -1,5 +1,5 @@
 use super::{ChangeSceneCommand, ChangeMsaaCommand};
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use cgmath::{Vector2, Vector3, vec2, vec3};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_engine::{AssetApi, ObjectApi};
@@ -52,8 +52,8 @@ impl Default for Basic3dScene {
 impl Basic3dScene {
     fn create_camera(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let camera = context.spawn();
-        context.add_component(camera, Transform::default());
-        let success = context.add_component(
+        context.add_component(camera, Transform::default())?;
+        context.add_component(
             camera,
             Camera {
                 up: vec3(0.0, 0.0, 1.0),
@@ -65,13 +65,9 @@ impl Basic3dScene {
                 yaw: std::f32::consts::PI,
                 pitch: 0.0,
             },
-        );
+        )?;
 
-        if !success {
-            Err(anyhow!("failed to create Camera"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
     fn add_update_systems(&mut self, context: &mut SceneContext<'_>) {
         context.add_update_system("rotator", RotatorSystem::default());
@@ -79,14 +75,6 @@ impl Basic3dScene {
     }
 
     fn create_primitives(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
-        let face_texture = context.texture("face").unwrap_or(context.default_texture());
-        let ghost_texture = context
-            .texture("ghost")
-            .unwrap_or(context.default_texture());
-        let escapee_texture = context
-            .texture("escapee")
-            .unwrap_or(context.default_texture());
-
         // primitives
         let triangle_id0 = context.spawn_triangle_3d(
             vec3(5.0, -0.2, -0.5),
@@ -472,9 +460,7 @@ impl Basic3dScene {
     }
 
     fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
-        let ghost_texture = context
-            .texture("ghost")
-            .unwrap_or(context.default_texture());
+        let ghost_texture = context.texture_asset_id("ghost").ok();
 
         let viking_room = context.spawn_model(
             "viking_room_lit3d",
@@ -484,7 +470,7 @@ impl Basic3dScene {
             },
             Material {
                 base_color: vec3(1.0, 0.0, 1.0).extend(1.0),
-                base_color_texture: Some(ghost_texture),
+                base_color_texture: ghost_texture,
                 pipeline_key: PipelineKey::Lit3D,
                 ..Material::default()
             },
@@ -667,7 +653,7 @@ impl Command for CreateTriangleCommand {
             SceneOwned {
                 scene_id: self.scene_id,
             },
-        );
+        )?;
         Ok(())
     }
 }

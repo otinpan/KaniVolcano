@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use cgmath::{vec3,vec2};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_math::Transform;
@@ -40,8 +40,8 @@ impl Scene for BasicFieldScene {
 impl BasicFieldScene {
     fn create_camera(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let camera = context.spawn();
-        context.add_component(camera, Transform::default());
-        let success = context.add_component(
+        context.add_component(camera, Transform::default())?;
+        context.add_component(
             camera,
             Camera {
                 up: vec3(0.0, 0.0, 1.0),
@@ -53,13 +53,9 @@ impl BasicFieldScene {
                 yaw: std::f32::consts::PI,
                 pitch: 0.0,
             },
-        );
+        )?;
 
-        if !success {
-            Err(anyhow!("failed to create Camera"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
     fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let teacup=context.spawn_gltf_model(
@@ -109,6 +105,31 @@ impl BasicFieldScene {
     }
 
     fn create_fundation(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
+        let sphere=context.spawn_sphere_3d(
+            vec3(0.0,0.0,5.0),
+            0.5,
+            32,
+            32,
+            vec3(1.0,1.0,1.0),
+            1.0,
+            Some("texture_ref_test"),
+            PipelineKey::Lit3D,
+        )?;
+        let cube=context.spawn_cube_3d(
+            vec3(0.0,2.0,5.0),
+            0.5,
+            vec3(0.0,0.0,45.0),
+            vec3(1.0,1.0,1.0),
+            1.0,
+            Some("texture_ref_test"),
+            PipelineKey::Pbr3D,
+        )?;
+        let entities = [sphere, cube];
+        context.bind_input_command(KeyCode::Backspace, InputTrigger::Pressed,
+            TextureRefTestCommand { entities, clear_material: false });
+        context.bind_input_command(KeyCode::KeyT, InputTrigger::Pressed,
+            TextureRefTestCommand { entities, clear_material: true });
+        println!("Texture test: refs=2. Backspace: despawn sphere/cube; T: remove one texture reference.");
         let foundation = context.spawn_rectangle_3d(
             vec3(0.0, 0.0, -1.0),
             30.0,
@@ -201,13 +222,51 @@ impl Default for BasicFieldScene {
 
 pub struct LoadAssetsCommand;
 
+// Restrict these operations to the two test primitives, preserving models and ground.
+struct TextureRefTestCommand {
+    entities: [EntityId; 2],
+    clear_material: bool,
+}
+
+impl Command for TextureRefTestCommand {
+    fn id(&self) -> String {
+        format!("texture_ref_test_{}", self.clear_material)
+    }
+
+    fn execute(&self, context: &mut CommandContext<'_>) -> Result<()> {
+        for &entity in &self.entities {
+            if self.clear_material {
+                let Some(mut material) = context.get_component::<MeshRenderer>(entity)
+                    .map(|renderer| renderer.material)
+                    .filter(|material| material.base_color_texture.is_some()) else { continue };
+                material.base_color_texture = None;
+                context.set_material(entity, material)?;
+                println!("Texture test: removed texture from {entity:?}");
+            } else {
+                if !context.despawn(entity) { continue; }
+                println!("Texture test: despawned {entity:?}");
+            }
+            break;
+        }
+        match context.texture_asset_id("texture_ref_test") {
+            Ok(id) => {
+                if let Some((_, asset)) = context.texture_assets().find(|(key, _)| *key == id) {
+                    println!("Texture test: refs={}, auto_release={}", asset.ref_count, asset.auto_release);
+                }
+            }
+            Err(_) => println!("Texture test: asset removed; GPU destruction queued (or already processed)."),
+        }
+        Ok(())
+    }
+}
+
 impl Command for LoadAssetsCommand{
     fn id(&self) -> String{
         format!("load_assets")
     }
 
     fn execute(&self, context: &mut CommandContext<'_>) -> Result<()>{
-        context.request_load_texture("jupiter","assets/textures/jupiter.png");
+        context.request_load_texture("jupiter","assets/textures/jupiter.png", false);
         context.request_load_model(
             "viking_room_lit3d",
             "assets/models/viking_room.obj",
@@ -227,7 +286,7 @@ impl Command for SpawnTransparentVikingRoom{
     }
 
     fn execute(&self, context: &mut CommandContext) -> Result<()>{
-        let jupiter=context.texture("jupiter")?;
+        let jupiter=context.texture_asset_id("jupiter")?;
         context.spawn_model(
             "viking_room_lit3d",
             Transform { 

@@ -618,8 +618,7 @@ pub fn spawn_primitive_from_mesh(
         .ok_or_else(|| anyhow!("mesh asset not found: {asset_id:?}"))?;
     let mesh_renderer = MeshRenderer::new(mesh, material)?;
     let mesh_renderer = mesh_renderer.with_asset_id(asset_id);
-    resources.retain_material_textures(&material)?;
-    resources.retain_mesh(asset_id);
+    resources.retain_component_assets(&mesh_renderer)?;
     let entity = world.spawn();
 
     let added_transform = world.add_component(entity, transform);

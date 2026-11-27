@@ -34,12 +34,12 @@ impl<'a> RenderContext<'a> {
         }
     }
 
-    pub fn add_component<T: Component>(&mut self, entity: EntityId, component: T) -> bool {
-        self.world.add_component::<T>(entity, component)
+    pub fn add_component<T: Component>(&mut self, entity: EntityId, component: T) -> Result<()> {
+        crate::EntityApi::add_component(self, entity, component)
     }
 
-    pub fn remove_component<T: Component>(&mut self, entity: EntityId) -> Option<T> {
-        self.world.remove_component::<T>(entity)
+    pub fn remove_component<T: Component>(&mut self, entity: EntityId) -> bool {
+        crate::EntityApi::remove_component::<T>(self, entity)
     }
 
     pub fn query1<A>(&self) -> Box<dyn Iterator<Item=(EntityId,&A)> + '_>
@@ -139,13 +139,6 @@ impl<'a> RenderContext<'a> {
         self.resources.register_primitive_mesh(mesh)
     }
 
-    pub(crate) fn retain_mesh(
-        &mut self,
-        asset_id: MeshAssetId,
-    ) -> Option<renderer_vulkan::MeshHandle> {
-        self.resources.retain_mesh(asset_id)
-    }
-
     pub(crate) fn release_mesh(
         &mut self,
         asset_id: MeshAssetId,
@@ -166,6 +159,15 @@ impl AssetApi for RenderContext<'_> {
     fn resources_mut(&mut self) -> &mut Resources {
         &mut self.resources
     }
+}
+
+impl crate::EntityApi for RenderContext<'_> {
+    fn world(&self) -> &World { self.world }
+    fn world_mut(&mut self) -> &mut World { self.world }
+    fn resources(&self) -> &Resources { self.resources }
+    fn resources_mut(&mut self) -> &mut Resources { self.resources }
+    fn render_commands(&self) -> &RenderCommandQueue { self.render_commands }
+    fn render_commands_mut(&mut self) -> &mut RenderCommandQueue { self.render_commands }
 }
 
 #[derive(Clone, Debug)]
@@ -260,21 +262,22 @@ impl RenderSystem {
 
                     context.register_primitive_mesh(primitive_mesh);
 
-                    let mesh = context
-                        .retain_mesh(primitive_mesh.asset_id)
+                    let mesh = context.resources
+                        .get_mesh_handle(primitive_mesh.asset_id)
                         .ok_or_else(|| {
                             anyhow!("mesh asset not found: {:?}", primitive_mesh.asset_id)
                         })?;
 
-                    let mesh_renderer = match MeshRenderer::new(mesh, pending.material) {
-                        Ok(mesh_renderer) => mesh_renderer.with_asset_id(primitive_mesh.asset_id),
-                        Err(error) => {
-                            context.release_mesh(primitive_mesh.asset_id);
-                            return Err(error);
+                    let result = MeshRenderer::new(mesh, pending.material).and_then(|renderer| {
+                        context.add_component(entity, renderer.with_asset_id(primitive_mesh.asset_id))
+                    });
+                    if let Err(error) = result {
+                        if let Some(mesh) = context.release_mesh(primitive_mesh.asset_id) {
+                            context.render_commands.destroy_mesh(mesh);
                         }
-                    };
-
-                    context.add_component(entity, mesh_renderer);
+                        return Err(error);
+                    }
+                    // Retain the renderer first; the pending component still owns its textures.
                     context.remove_component::<PendingPrimitiveMesh>(entity);
                 }
                 RenderCommand::SetSkybox { mesh, texture } => unsafe {

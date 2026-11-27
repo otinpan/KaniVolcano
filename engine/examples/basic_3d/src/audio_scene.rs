@@ -1,7 +1,7 @@
 use super::ChangeSceneCommand;
 use crate::system::{AudioSystem, MoveRotateSystem};
 use crate::component::{MoveRotateComponent};
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use cgmath::{vec2, vec3};
 use kani_volcano_audio::ReverbSettings;
 use kani_volcano_engine::prelude::*;
@@ -96,8 +96,8 @@ impl Scene for AudioScene {
 impl AudioScene {
     fn create_camera(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let camera = context.spawn();
-        context.add_component(camera, Transform::default());
-        let success = context.add_component(
+        context.add_component(camera, Transform::default())?;
+        context.add_component(
             camera,
             Camera {
                 target: vec3(-5.0, 0.0, 0.0),
@@ -108,13 +108,9 @@ impl AudioScene {
                 yaw: std::f32::consts::PI,
                 pitch: 0.0,
             },
-        );
+        )?;
 
-        if !success {
-            Err(anyhow!("failed to create Camera"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     fn load_audio(&self, context: &mut SceneContext<'_>) -> Result<()> {
@@ -294,14 +290,14 @@ impl AudioScene {
                     clock_wise: true,
                     speed: std::f32::consts::FRAC_PI_2/4.0, // 4.0secs -> 90rad
                 }
-            );
+            )?;
 
             context.add_component(
                 bill,
                 SceneOwned {
                     scene_id: self.scene_id,
                 },
-            );
+            )?;
             context.add_component(
                 bill,
                 AudioSource {
@@ -309,7 +305,7 @@ impl AudioScene {
                     emitter: Some(item.3),
                     settings: Default::default(),
                 },
-            );
+            )?;
         }
         Ok(true)
     }
@@ -369,13 +365,13 @@ impl AudioScene {
             context.add_component(
                 obj,
                 crate::component::SphereColliderComponent { radius: size / 2.0 },
-            );
+            )?;
             context.add_component(
                 obj,
                 SceneOwned {
                     scene_id: self.scene_id,
                 },
-            );
+            )?;
         }
 
         Ok(())

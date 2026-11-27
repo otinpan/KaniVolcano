@@ -82,7 +82,7 @@ impl ThreadProfilerSystem {
     fn tag(context: &mut UpdateContext<'_>, id: EntityId, scene_id: Option<SceneId>) {
         context.set_tags(id, ["ThreadProfiler"]);
         if let Some(scene_id) = scene_id {
-            context.add_component(id, SceneOwned { scene_id });
+            context.add_component(id, SceneOwned { scene_id }).expect("profiler entity exists");
         }
     }
 
@@ -141,11 +141,12 @@ impl ThreadProfilerSystem {
             scale: vec3(1.0, size.x, size.y),
             ..Transform::default()
         };
-        let material = &mut context
-            .get_component_mut::<MeshRenderer>(id)
+        let mut material = context
+            .get_component::<MeshRenderer>(id)
             .unwrap()
             .material;
         material.base_color = color.extend(material.base_color.w);
+        context.set_material(id, material)?;
         context
             .get_component_mut::<Visibility>(id)
             .unwrap()
@@ -176,8 +177,8 @@ impl ThreadProfilerSystem {
             }
             let id = context.spawn();
             Self::tag(context, id, self.scene_id);
-            context.add_component(id, Transform::default());
-            context.add_component(id, Visibility::default());
+            context.add_component(id, Transform::default()).expect("profiler entity exists");
+            context.add_component(id, Visibility::default()).expect("profiler entity exists");
             context.add_component(
                 id,
                 Text {
@@ -189,7 +190,7 @@ impl ThreadProfilerSystem {
                     alpha: 1.0,
                     text_pipeline: TextPipeline::Ui2D,
                 },
-            );
+            ).expect("profiler entity exists");
             if *used == self.labels.len() {
                 self.labels.push(id);
             } else {

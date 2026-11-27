@@ -3,7 +3,7 @@
 // making this implementation slower than RotatorSystem in our measurements.
 use super::ChangeSceneCommand;
 use crate::system::ParallelRotatorSystem;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use cgmath::{vec2, vec3};
 use kani_volcano_engine::ThreadProfilerSystem;
 use kani_volcano_engine::prelude::*;
@@ -64,8 +64,8 @@ impl Scene for ParallelCalculatorScene {
 impl ParallelCalculatorScene {
     fn create_camera(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
         let camera = context.spawn();
-        context.add_component(camera, Transform::default());
-        let success = context.add_component(
+        context.add_component(camera, Transform::default())?;
+        context.add_component(
             camera,
             Camera {
                 up: vec3(0.0, 0.0, 1.0),
@@ -77,13 +77,9 @@ impl ParallelCalculatorScene {
                 yaw: std::f32::consts::PI,
                 pitch: 0.0,
             },
-        );
+        )?;
 
-        if !success {
-            Err(anyhow!("failed to create Camera"))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     fn create_fundation(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
@@ -124,19 +120,19 @@ impl ParallelCalculatorScene {
         for _ in 0..100_000 {
             let entity = context.spawn();
 
-            context.add_component(entity, Transform::default());
+            context.add_component(entity, Transform::default())?;
             context.add_component(
                 entity,
                 Rotator {
                     speed: vec3(60.0, 0.0, 0.0),
                 },
-            );
+            )?;
             context.add_component(
                 entity,
                 SceneOwned {
                     scene_id: self.scene_id,
                 },
-            );
+            )?;
         }
 
         Ok(())
@@ -173,14 +169,14 @@ impl ParallelCalculatorScene {
                 Rotator {
                     speed: vec3(rot, 0.0, 0.0),
                 },
-            );
+            )?;
             context.set_tags(obj, ["rotator"]);
             context.add_component(
                 obj,
                 SceneOwned {
                     scene_id: self.scene_id,
                 },
-            );
+            )?;
         }
         Ok(())
     }

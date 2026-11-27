@@ -91,19 +91,16 @@ impl<'a> CommandContext<'a> {
         material: Material,
         auto_release: bool,
     ) -> Result<EntityId> {
-        self.resources.retain_material_textures(&material)?;
         let entity = self.spawn();
 
-        self.add_component(entity, transform);
-        self.add_component(entity, Visibility::default());
-        self.add_component(
-            entity,
-            PendingPrimitiveMesh {
-                shape: shape.clone(),
-                material,
-                auto_release,
-            },
-        );
+        if let Err(error) = self.add_component(entity, PendingPrimitiveMesh {
+            shape, material, auto_release,
+        }) {
+            self.world_mut().despawn(entity);
+            return Err(error);
+        }
+        self.add_component(entity, transform)?;
+        self.add_component(entity, Visibility::default())?;
 
         self.render_commands.create_primitive_mesh(entity);
 

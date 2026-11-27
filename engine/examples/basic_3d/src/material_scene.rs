@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use cgmath::{vec2, vec3};
 use kani_volcano_engine::prelude::*;
 use kani_volcano_math::Transform;
@@ -49,8 +49,8 @@ impl MaterialScene {
         context.add_component(entity, Transform {
             position: vec3(4.0, 0.0, 1.0),
             ..Transform::default()
-        });
-        if !context.add_component(entity, Camera {
+        })?;
+        context.add_component(entity, Camera {
             up: vec3(0.0, 0.0, 1.0),
             target: vec3(-5.0, 0.0, 1.0),
             fov_y: 55.0,
@@ -58,9 +58,7 @@ impl MaterialScene {
             far: 100.0,
             yaw: std::f32::consts::PI,
             pitch: 0.0,
-        }) {
-            return Err(anyhow!("failed to create material comparison camera"));
-        }
+        })?;
         Ok(())
     }
 
@@ -97,7 +95,7 @@ impl MaterialScene {
         };
         Self::spawn_sample(context, 0, -1.2, white, "No texture")?;
         Self::spawn_sample(context, 1, -1.2, Material {
-            base_color_texture: Some(context.texture("face")?),
+            base_color_texture: Some(context.texture_asset_id("face")?),
             ..white
         }, "face texture")?;
 

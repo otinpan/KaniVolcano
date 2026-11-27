@@ -141,19 +141,16 @@ impl<'a> SceneContext<'a> {
         material: Material,
         auto_release: bool,
     ) -> Result<EntityId> {
-        self.resources.retain_material_textures(&material)?;
         let entity = self.spawn();
 
-        self.add_component(entity, transform);
-        self.add_component(entity, Visibility::default());
-        self.add_component(
-            entity,
-            PendingPrimitiveMesh {
-                shape: shape.clone(),
-                material,
-                auto_release,
-            },
-        );
+        if let Err(error) = self.add_component(entity, PendingPrimitiveMesh {
+            shape, material, auto_release,
+        }) {
+            self.world_mut().despawn(entity);
+            return Err(error);
+        }
+        self.add_component(entity, transform)?;
+        self.add_component(entity, Visibility::default())?;
 
         self.scheduler.render_commands.create_primitive_mesh(entity);
 
@@ -313,7 +310,7 @@ mod tests {
 
         let entity = context.spawn();
         let mesh = MeshHandle::new(0, VertexLayout::Lit3D);
-        context.add_component(entity, MeshRenderer::new(mesh, Material::default()).unwrap());
+        context.add_component(entity, MeshRenderer::new(mesh, Material::default()).unwrap()).unwrap();
         context.set_material(entity, material).unwrap();
         let renderer = context.get_component::<MeshRenderer>(entity).unwrap();
         assert_eq!(renderer.material, material);

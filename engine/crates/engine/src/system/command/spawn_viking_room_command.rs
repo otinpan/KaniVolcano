@@ -83,7 +83,7 @@ impl Command for SpawnVikingRoomCommand {
                 Rotator {
                     speed: vec3(20.0, 0.0, 0.0),
                 },
-            );
+            )?;
             context.set_tags(entity, ["Model", "VikingRoom", variant.0]);
         }
 
