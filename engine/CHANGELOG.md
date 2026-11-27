@@ -176,3 +176,6 @@ Fixed job system crashes in optimized builds caused by reusing a previous worker
 - Changed `add_component()` to return `Result<()>` and `remove_component()` to return `bool`.
 - Restricted mutable access to asset-owning components; use `set_material()` or `add_component()` instead.
 - Updated Japanese and English API documentation.
+
+## v0.7.3
+- create `request_load_gltf_model()` ni AssetLode API to load gltf model asynchronously
