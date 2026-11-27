@@ -609,7 +609,10 @@ unsafe fn update_secondary_command_buffer(
     match pipeline.key {
         PipelineKey::Mesh3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let texture_index = object.material.base_color_texture.map_or(0, |texture| texture.0);
+            let material_set = renderer.data.material_descriptor_sets.get(texture_index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("Missing material descriptor for texture: {texture_index}"))?.set;
             let sets = [global_set, material_set];
 
             renderer.device.cmd_bind_descriptor_sets(
@@ -659,7 +662,10 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Transparent3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let texture_index = object.material.base_color_texture.map_or(0, |texture| texture.0);
+            let material_set = renderer.data.material_descriptor_sets.get(texture_index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("Missing material descriptor for texture: {texture_index}"))?.set;
             let sets = [global_set, material_set];
 
             renderer.device.cmd_bind_descriptor_sets(
@@ -688,7 +694,10 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Lit3D => {
             let global_set = renderer.data.global_descriptor_sets[image_index];
-            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let texture_index = object.material.base_color_texture.map_or(0, |texture| texture.0);
+            let material_set = renderer.data.material_descriptor_sets.get(texture_index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("Missing material descriptor for texture: {texture_index}"))?.set;
             let light_set = renderer.data.light_descriptor_sets[image_index];
 
             let sets = [global_set, material_set, light_set];
@@ -718,7 +727,10 @@ unsafe fn update_secondary_command_buffer(
             );
         }
         PipelineKey::Ui2D => {
-            let material_set = renderer.data.material_descriptor_sets[object.material.base_color_texture.map_or(0, |texture| texture.0)];
+            let texture_index = object.material.base_color_texture.map_or(0, |texture| texture.0);
+            let material_set = renderer.data.material_descriptor_sets.get(texture_index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("Missing material descriptor for texture: {texture_index}"))?.set;
             let sets = [material_set];
 
             renderer.device.cmd_bind_descriptor_sets(
@@ -748,7 +760,9 @@ unsafe fn update_secondary_command_buffer(
         }
         PipelineKey::Pbr3D => {
             let pbr_global_set = renderer.data.pbr_global_descriptor_sets[image_index];
-            let material_set = renderer.data.pbr_material_descriptor_sets[&object.material.pbr_texture_key()];
+            let material_set = renderer.data.pbr_material_descriptor_sets
+                .get(&object.material.pbr_texture_key())
+                .ok_or_else(|| anyhow!("Missing PBR material descriptor"))?.set;
             let light_set = renderer.data.light_descriptor_sets[image_index];
 
             let sets = [pbr_global_set, material_set, light_set];

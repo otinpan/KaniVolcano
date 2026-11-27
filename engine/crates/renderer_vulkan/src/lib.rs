@@ -61,7 +61,7 @@ use self::pipeline::{
 };
 use self::swapchain::{create_framebuffers, create_swapchain, create_swapchain_image_views};
 use self::sync::{create_render_finished_semaphores, create_sync_objects};
-use self::types::{Mesh, RenderSkybox, VulkanData};
+use self::types::{Mesh, PbrMaterialDescriptor, RenderSkybox, VulkanData};
 pub use self::types::{
     MeshHandle, PipelineKey, RenderCamera, RenderItem, RenderMaterial, RenderAlphaMode, SkyboxTextureHandle, TextureHandle,
     TextRenderItem, TextureColorSpace, GltfTextureHandle,
@@ -449,14 +449,15 @@ impl VulkanRenderer {
         // Only this unpublished tail is freed; existing descriptor sets stay valid.
         while self.data.textures.len() > first {
             let index = self.data.textures.len() - 1;
-            let pool_index = self.data.material_descriptor_pool_indices[index];
-            let pool = &mut self.data.material_descirptor_pool[pool_index];
+            let descriptor = self.data.material_descriptor_sets.get(index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| anyhow!("Missing material descriptor for texture: {index}"))?;
+            let pool = &mut self.data.material_descirptor_pools[descriptor.pool_index];
             self.device.free_descriptor_sets(
-                pool.handle, &[self.data.material_descriptor_sets[index]],
+                pool.handle, &[descriptor.set],
             )?;
             pool.live_sets -= 1;
             self.data.material_descriptor_sets.pop();
-            self.data.material_descriptor_pool_indices.pop();
             let texture = self.data.textures.pop().flatten().expect("validated texture batch");
             self.device.destroy_image_view(texture.image_view, None);
             self.device.destroy_image(texture.image, None);
@@ -535,6 +536,7 @@ impl VulkanRenderer {
         Ok(handles[0])
     }
 
+    // Create pbr descriptor sets that not cached.
     unsafe fn prepare_pbr_material_descriptors(&mut self) -> Result<()> {
         let mut missing = std::collections::HashSet::new();
         for object in &self.data.render_objects {
@@ -559,6 +561,7 @@ impl VulkanRenderer {
             .descriptor_count(descriptor_count)];
         let info = vk::DescriptorPoolCreateInfo::builder()
             .max_sets(count)
+            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
             .pool_sizes(&sizes);
         let pool = self.device.create_descriptor_pool(&info, None)?;
         let sets = match uniform::create_pbr_material_descriptor_sets(
@@ -570,8 +573,11 @@ impl VulkanRenderer {
                 return Err(error);
             }
         };
-        self.data.pbr_material_descriptor_sets.extend(textures.into_iter().zip(sets));
+        let pool_index = self.data.pbr_material_descriptor_pools.len();
         self.data.pbr_material_descriptor_pools.push(pool);
+        self.data.pbr_material_descriptor_sets.extend(
+            textures.into_iter().zip(sets).map(|(key, set)| (key, PbrMaterialDescriptor { set, pool_index })),
+        );
         Ok(())
     }
 
@@ -797,6 +803,10 @@ impl VulkanRenderer {
 
         Ok(())
     }
+
+    pub unsafe fn destroy_texture(&mut self, texture_handle: TextureHandle) -> Result<()>{
+
+    } 
 
     pub fn set_render_items(&mut self, render_items: Vec<RenderItem>) {
         self.data.render_objects = render_items;
@@ -1063,11 +1073,10 @@ impl VulkanRenderer {
             self.device.destroy_descriptor_pool(pool, None);
         }
         self.data.pbr_material_descriptor_sets.clear();
-        for pool in self.data.material_descirptor_pool.drain(..) {
+        for pool in self.data.material_descirptor_pools.drain(..) {
             self.device.destroy_descriptor_pool(pool.handle, None);
         }
         self.data.material_descriptor_sets.clear();
-        self.data.material_descriptor_pool_indices.clear();
         self.device.destroy_descriptor_set_layout(
             self.data.pbr_material_descriptor_set_layout, None,
         );

@@ -7,7 +7,7 @@ use vulkanalia::prelude::v1_0::*;
 
 use super::VulkanRenderer;
 use super::buffer::create_buffer;
-use super::types::{TextureHandle, VulkanData};
+use super::types::{MaterialDescriptor, TextureHandle, VulkanData};
 
 type Mat4 = cgmath::Matrix4<f32>;
 
@@ -243,7 +243,7 @@ pub unsafe fn create_material_descriptor_pool(device: &Device, data: &mut Vulkan
         .max_sets(CAPACITY)
         .pool_sizes(&sizes);
     let handle = device.create_descriptor_pool(&info, None)?;
-    data.material_descirptor_pool.push(super::types::MaterialDescriptorPool {
+    data.material_descirptor_pools.push(super::types::MaterialDescriptorPool {
         handle,
         capacity: CAPACITY,
         live_sets: 0,
@@ -292,8 +292,7 @@ pub unsafe fn create_material_descriptor_sets(
 ) -> Result<()> {
     anyhow::ensure!(
         first_texture_index <= data.textures.len()
-            && first_texture_index == data.material_descriptor_sets.len()
-            && first_texture_index == data.material_descriptor_pool_indices.len(),
+            && first_texture_index == data.material_descriptor_sets.len(),
         "Material descriptors must be appended in texture order"
     );
     if first_texture_index == data.textures.len() { return Ok(()); }
@@ -305,23 +304,23 @@ pub unsafe fn create_material_descriptor_sets(
         "Material descriptors require a layout, sampler and valid image views"
     );
 
-    let initial_pool_count = data.material_descirptor_pool.len();
+    let initial_pool_count = data.material_descirptor_pools.len();
     let mut batches: Vec<(usize, Vec<vk::DescriptorSet>)> = Vec::new();
     let result = (|| -> Result<()> {
         let mut remaining = data.textures.len() - first_texture_index;
         let mut pool_index = 0;
         while remaining > 0 {
             // Scan each pool at most once during this call.
-            while pool_index < data.material_descirptor_pool.len()
-                && data.material_descirptor_pool[pool_index].live_sets
-                    == data.material_descirptor_pool[pool_index].capacity
+            while pool_index < data.material_descirptor_pools.len()
+                && data.material_descirptor_pools[pool_index].live_sets
+                    == data.material_descirptor_pools[pool_index].capacity
             {
                 pool_index += 1;
             }
-            if pool_index == data.material_descirptor_pool.len() {
+            if pool_index == data.material_descirptor_pools.len() {
                 create_material_descriptor_pool(device, data)?;
             }
-            let pool = &mut data.material_descirptor_pool[pool_index];
+            let pool = &mut data.material_descirptor_pools[pool_index];
             let count = remaining.min((pool.capacity - pool.live_sets) as usize);
             let layouts = vec![data.material_descriptor_set_layout; count];
             let info = vk::DescriptorSetAllocateInfo::builder()
@@ -340,14 +339,14 @@ pub unsafe fn create_material_descriptor_sets(
         for (pool_index, sets) in &batches {
             // New pools are destroyed wholesale below.
             if *pool_index >= initial_pool_count { continue; }
-            let pool = &mut data.material_descirptor_pool[*pool_index];
+            let pool = &mut data.material_descirptor_pools[*pool_index];
             match device.free_descriptor_sets(pool.handle, sets) {
                 Ok(_) => pool.live_sets -= sets.len() as u32,
                 // Keep the allocation counted until the pool is destroyed.
                 Err(cleanup) => cleanup_errors.push(cleanup.to_string()),
             }
         }
-        for pool in data.material_descirptor_pool.drain(initial_pool_count..) {
+        for pool in data.material_descirptor_pools.drain(initial_pool_count..) {
             device.destroy_descriptor_pool(pool.handle, None);
         }
         return Err(if cleanup_errors.is_empty() { error } else {
@@ -368,8 +367,7 @@ pub unsafe fn create_material_descriptor_sets(
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&images);
             device.update_descriptor_sets(&[write], &[] as &[vk::CopyDescriptorSet]);
-            data.material_descriptor_sets.push(set);
-            data.material_descriptor_pool_indices.push(pool_index);
+            data.material_descriptor_sets.push(Some(MaterialDescriptor { set, pool_index }));
         }
     }
     Ok(())

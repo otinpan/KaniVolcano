@@ -37,15 +37,13 @@ pub struct VulkanData {
     pub skybox_descriptor_set_layout: vk::DescriptorSetLayout,
     pub global_descriptor_sets: Vec<vk::DescriptorSet>,
     pub pbr_global_descriptor_sets: Vec<vk::DescriptorSet>,
-    pub material_descriptor_sets: Vec<vk::DescriptorSet>,
-    // Pool index for each set allocated by the incremental material path.
-    pub material_descriptor_pool_indices: Vec<usize>,
-    pub pbr_material_descriptor_sets: HashMap<[TextureHandle;5], vk::DescriptorSet>,
+    pub material_descriptor_sets: Vec<Option<MaterialDescriptor>>,
+    pub material_descirptor_pools: Vec<MaterialDescriptorPool>,
+    pub pbr_material_descriptor_sets: HashMap<[TextureHandle;5], PbrMaterialDescriptor>,
     pub pbr_material_descriptor_pools: Vec<vk::DescriptorPool>,
     pub light_descriptor_sets: Vec<vk::DescriptorSet>,
     pub skybox_descriptor_sets: Vec<vk::DescriptorSet>,
     pub descriptor_pool: vk::DescriptorPool,
-    pub material_descirptor_pool: Vec<MaterialDescriptorPool>,
     // Framebuffers
     pub framebuffers: Vec<vk::Framebuffer>,
     // Command Pool
@@ -87,6 +85,20 @@ pub struct VulkanData {
     // Camera
     pub camera: RenderCamera,
 }
+
+#[derive(Clone, Debug)]
+pub struct MaterialDescriptor{
+    pub set: vk::DescriptorSet, // set is reference of resources which is sent to shader
+    pub pool_index: usize, // pool is region that allocate descriptor set
+}
+
+#[derive(Clone, Debug)]
+pub struct PbrMaterialDescriptor{
+    pub set: vk::DescriptorSet,
+    pub pool_index: usize,
+}
+
+
 
 #[derive(Clone, Debug)]
 pub struct MaterialDescriptorPool{
