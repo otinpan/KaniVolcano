@@ -1,6 +1,6 @@
 use crate::{
     Component, ComponentPool, EntityId, MeshRenderer, RenderCommandQueue, Resources, World,
-    MeshAssetId, GltfModelRoot, ParentComponent, PendingPrimitiveMesh,
+    MeshAssetId, GltfModelRoot, ParentComponent, PendingPrimitiveMesh, 
 };
 use std::collections::{HashMap, HashSet};
 
@@ -62,9 +62,13 @@ pub trait EntityApi {
                 .map(|root| root.model_id);
             // decrement model reference counter and children's mesh reference counter
             if let Some(id) = model_id {
-                for handle in self.resources_mut().release_gltf_model(id) {
-                    // if chidlren's mesh reference counter is zero, release mesh
-                    self.render_commands_mut().destroy_mesh(handle);
+                let released=self.resources_mut().release_gltf_model(id);
+                for mesh in released.meshes{
+                    self.render_commands_mut().destroy_mesh(mesh);
+                }
+
+                for texture in released.textures{
+                    self.render_commands_mut().destroy_texture(texture);
                 }
             }
             self.world_mut().despawn(current);
@@ -273,20 +277,21 @@ mod tests {
             });
             assert!(context.despawn(root));
             assert_eq!(context.resources.texture_assets().next().unwrap().1.ref_count, 1);
-            assert!(context.render_commands.pending_texture_destroys().is_empty());
+            assert_eq!(context.render_commands.drain().count(), 0);
             assert!(!context.despawn(root));
             assert!(context.despawn(unrelated));
+            let commands: Vec<_> = context.render_commands.drain().collect();
             if auto_release {
                 assert!(context.resources.get_texture_handle(texture).is_none());
-                assert_eq!(context.render_commands.pending_texture_destroys(), &[handle]);
+                assert!(matches!(commands.as_slice(),
+                    [crate::RenderCommand::DestroyTexture { texture }] if *texture == handle));
             } else {
                 assert_eq!(context.resources.texture_assets().next().unwrap().1.ref_count, 0);
-                assert!(context.render_commands.pending_texture_destroys().is_empty());
+                assert!(commands.is_empty());
             }
             assert!(!context.despawn(unrelated));
-            // Draining ordinary commands must not discard pending GPU cleanup.
+            // Repeated despawn must not queue destruction twice.
             assert_eq!(context.render_commands.drain().count(), 0);
-            assert_eq!(context.render_commands.pending_texture_destroys().len(), usize::from(auto_release));
         }
     }
 

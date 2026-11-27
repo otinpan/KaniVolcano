@@ -96,6 +96,12 @@ pub struct GltfModelAssetId(pub usize);
 
 pub use renderer_vulkan::GltfTextureHandle;
 
+#[derive(Default)]
+pub struct ReleasedGltfModelAssets{
+    pub meshes: Vec<MeshHandle>,
+    pub textures: Vec<TextureHandle>,
+}
+
 
 pub struct Resources {
     mesh_assets: Vec<Option<MeshAsset>>,
@@ -313,19 +319,29 @@ impl Resources {
     }
 
     /// Remove the model's ownership references. The caller must destroy every
-    /// returned GPU handle; meshes still retained by entities/models stay alive.
-    #[must_use = "returned mesh handles must be destroyed by the renderer"]
-    pub fn remove_gltf_model_asset(&mut self, id: GltfModelAssetId) -> Vec<MeshHandle> {
+    /// returned GPU handle; assets still retained by entities/models stay alive.
+    #[must_use = "returned mesh and texture handles must be destroyed by the renderer"]
+    pub fn remove_gltf_model_asset(&mut self, id: GltfModelAssetId) -> ReleasedGltfModelAssets {
         let Some(model) = self.gltf_model_assets.get_mut(id.0).and_then(Option::take) else {
-            return Vec::new();
+            return ReleasedGltfModelAssets::default();
         };
         self.gltf_models.retain(|_, value| *value != id);
-        let mut released = Vec::new();
+        let mut released = ReleasedGltfModelAssets::default();
         let mut seen = HashSet::new();
         for mesh in model.meshes.into_iter().flatten() {
             if seen.insert(mesh) {
                 if let Some(handle) = self.release_mesh(mesh) {
-                    released.push(handle);
+                    released.meshes.push(handle);
+                }
+            }
+        }
+        let mut seen_textures = HashSet::new();
+        for texture in model.textures.into_iter()
+            .flat_map(|texture| [texture.srgb, texture.linear]).flatten()
+        {
+            if seen_textures.insert(texture) {
+                if let Some(handle) = self.release_texture(texture) {
+                    released.textures.push(handle);
                 }
             }
         }
@@ -653,20 +669,20 @@ impl Resources {
         Ok(())
     }
 
-    /// Releases one instance reference and returns meshes eligible for GPU destruction.
+    /// Releases one instance reference and returns assets eligible for GPU destruction.
     #[must_use]
-    pub fn release_gltf_model(&mut self, id: GltfModelAssetId) -> Vec<MeshHandle> {
+    pub fn release_gltf_model(&mut self, id: GltfModelAssetId) -> ReleasedGltfModelAssets {
         let Some(model) = self.gltf_model_assets.get_mut(id.0).and_then(Option::as_mut) else {
-            return Vec::new();
+            return ReleasedGltfModelAssets::default();
         };
         if model.ref_count == 0 {
-            return Vec::new();
+            return ReleasedGltfModelAssets::default();
         }
         model.ref_count -= 1;
         if model.ref_count == 0 && model.auto_release {
             return self.remove_gltf_model_asset(id);
         }
-        Vec::new()
+        ReleasedGltfModelAssets::default()
     }
 
     pub fn release_mesh(&mut self, id: MeshAssetId) -> Option<MeshHandle> {
@@ -975,10 +991,46 @@ mod tests {
         assert_eq!(resources.release_mesh(mesh), None);
         assert_eq!(resources.retain_mesh(mesh), Some(mesh_handle(3)));
         assert_eq!(resources.release_mesh(mesh), None);
-        assert_eq!(resources.remove_gltf_model_asset(model), vec![mesh_handle(3)]);
+        let released = resources.remove_gltf_model_asset(model);
+        assert_eq!(released.meshes, vec![mesh_handle(3)]);
+        assert_eq!(released.textures, vec![TextureHandle(7), TextureHandle(8)]);
+        assert!(resources.get_texture_handle(srgb).is_none());
+        assert!(resources.get_texture_handle(linear).is_none());
         assert!(resources.get_mesh_handle(mesh).is_none());
         assert!(!resources.gltf_models.contains_key("character"));
-        assert!(resources.remove_gltf_model_asset(model).is_empty());
+        let released = resources.remove_gltf_model_asset(model);
+        assert!(released.meshes.is_empty() && released.textures.is_empty());
+    }
+
+    #[test]
+    fn releasing_model_preserves_shared_and_persistent_textures() {
+        for auto_release in [false, true] {
+            let mut resources = Resources::default();
+            let texture = resources.insert_texture_asset(TextureHandle(9), true);
+            let persistent = resources.insert_texture_asset(TextureHandle(10), false);
+            let model = resources.insert_gltf_model_asset(empty_gltf_model(), vec![], vec![],
+                vec![GltfTextureAsset { srgb: Some(texture), linear: Some(texture) },
+                     GltfTextureAsset { srgb: Some(persistent), linear: None }], auto_release).unwrap();
+            resources.retain_texture(texture);
+            resources.retain_gltf_model(model).unwrap();
+            resources.retain_gltf_model(model).unwrap();
+            assert!(resources.release_gltf_model(model).textures.is_empty());
+            assert_eq!(resources.texture_assets[texture.0].as_ref().unwrap().ref_count, 2);
+            let released = resources.release_gltf_model(model);
+            assert!(released.meshes.is_empty() && released.textures.is_empty());
+            if !auto_release {
+                assert_eq!(resources.gltf_model_asset(model).unwrap().ref_count, 0);
+                assert_eq!(resources.texture_assets[texture.0].as_ref().unwrap().ref_count, 2);
+                let released = resources.remove_gltf_model_asset(model);
+                assert!(released.meshes.is_empty() && released.textures.is_empty());
+            }
+            assert!(resources.gltf_model_asset(model).is_none());
+            assert_eq!(resources.texture_assets[texture.0].as_ref().unwrap().ref_count, 1);
+            assert_eq!(resources.texture_assets[persistent.0].as_ref().unwrap().ref_count, 0);
+            assert_eq!(resources.release_texture(texture), Some(TextureHandle(9)));
+            let released = resources.release_gltf_model(model);
+            assert!(released.meshes.is_empty() && released.textures.is_empty());
+        }
     }
 
     #[test]
@@ -990,8 +1042,8 @@ mod tests {
         let second = resources.insert_gltf_model_asset(empty_gltf_model(), vec![vec![mesh]], Vec::new(), Vec::new(), true).unwrap();
         assert_eq!(mesh_asset(&resources, mesh).ref_count, 2);
         resources.retain_mesh(mesh);
-        assert!(resources.remove_gltf_model_asset(first).is_empty());
-        assert!(resources.remove_gltf_model_asset(second).is_empty());
+        assert!(resources.remove_gltf_model_asset(first).meshes.is_empty());
+        assert!(resources.remove_gltf_model_asset(second).meshes.is_empty());
         assert_eq!(mesh_asset(&resources, mesh).ref_count, 1);
         assert_eq!(resources.release_mesh(mesh), Some(mesh_handle(4)));
     }
@@ -1011,7 +1063,7 @@ mod tests {
         let mut resources = Resources::default();
         let mesh = resources.insert_mesh_asset(mesh_handle(6), false);
         let model = resources.insert_gltf_model_asset(empty_gltf_model(), vec![vec![mesh]], Vec::new(), Vec::new(), false).unwrap();
-        assert!(resources.remove_gltf_model_asset(model).is_empty());
+        assert!(resources.remove_gltf_model_asset(model).meshes.is_empty());
         assert_eq!(mesh_asset(&resources, mesh).ref_count, 0);
         assert_eq!(resources.get_mesh_handle(mesh), Some(mesh_handle(6)));
     }
