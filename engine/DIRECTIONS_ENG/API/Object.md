@@ -6,6 +6,12 @@ It is available from contexts that implement `ObjectApi`, such as `SceneContext`
 
 Object API functions usually create an entity and automatically attach the components needed for rendering.
 
+## Asset References
+
+Spawning retains the mesh and the textures in its Material; despawning releases those references. Reusing a texture in multiple slots of one Material counts as one reference. Pending primitives retain textures while waiting for GPU mesh creation.
+
+A loaded glTF model owns its dependent meshes and textures; spawned instances also retain the assets they use. Calling `despawn()` on the returned root removes its descendants and releases their references. Automatic release follows each asset's `auto_release` flag.
+
 ## Models
 
 Models must be loaded from `App` before they can be spawned.
@@ -26,9 +32,7 @@ unsafe {
 Spawn the model from a context.
 
 ```rust
-let texture = context
-    .texture("viking_room")
-    .unwrap_or(context.default_texture());
+let texture = context.texture_asset_id("viking_room").ok();
 
 context.spawn_model(
     "viking_room_lit3d",
@@ -38,11 +42,10 @@ context.spawn_model(
         scale: vec3(1.0, 1.0, 1.0),
     },
     Material {
-        color: vec3(1.0, 1.0, 1.0),
-        alpha: 1.0,
-        use_texture: true,
-        texture,
+        base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+        base_color_texture: texture,
         pipeline_key: PipelineKey::Lit3D,
+        ..Material::default()
     },
 )?;
 ```
@@ -361,7 +364,7 @@ context.add_component(
         scale: vec3(1.0, 2.0, 0.0),
         ..Default::default()
     },
-);
+)?;
 
 context.add_component(
     hello_world,
@@ -372,8 +375,9 @@ context.add_component(
         line_height: 100.0,
         color: vec3(1.0, 1.0, 0.0),
         alpha: 0.5,
+        text_pipeline: TextPipeline::Ui2D,
     },
-);
+)?;
 ```
 
 ### 3D
@@ -423,52 +427,45 @@ If no draw order is specified, UI2D elements are rendered in the order they were
 You can control the rendering order using the following API:
 
 ```rust
-context.set_draw_order(entity: EntityId, order: i32)
+context.set_draw_order(entity, order)?;
 ```
 
 For example:
 
 ```rust
-context.set_draw_order(background, -100);
-context.set_draw_order(button, 10);
-context.set_draw_order(popup, 100);
+context.set_draw_order(background, -100)?;
+context.set_draw_order(button, 10)?;
+context.set_draw_order(popup, 100)?;
 ```
 
 Elements with higher draw order values are rendered on top of those with lower values.
 
 ## Material Configuration
 
+Texture slots use `Option<TextureAssetId>`; `None` disables that texture. Change materials through `set_material()`, which retains new textures before releasing old references. Invalid assets or a pipeline incompatible with the mesh return an error and preserve the old Material.
+
+Direct mutable access to `MeshRenderer` and other asset-owning components is restricted. For glTF, change the primitive entity with a `MeshRenderer`, not the model root.
+
+
 Materials determine the visual appearance and surface properties of objects when rendered.
 
 ```rust
 pub struct Material {
-    pub base_color: Vector4<f32>, // Base color (Supported)
-    pub base_color_texture: Option<TextureHandle>, // Base color texture (Supported)
-
-    // Surface properties
-    pub metallic: f32, // Metallic factor (Supported)
-    pub roughness: f32, // Surface roughness (Supported)
-    pub metallic_roughness_texture: Option<TextureHandle>, // Per-pixel roughness (G) and metallic (B) values (Not supported)
-
-    // Normal mapping (Not supported)
-    pub normal_texture: Option<TextureHandle>, // Normal map for surface detail
-    pub normal_scale: f32, // Normal map intensity
-
-    // Emission
-    pub emissive_color: Vector3<f32>, // Emissive color (Supported)
-    pub emissive_strength: f32, // Emissive intensity multiplier (Supported)
-    pub emissive_texture: Option<TextureHandle>, // Emissive texture (Not supported)
-
-    // Ambient occlusion
-    pub occlusion_strength: f32, // Controls the intensity of ambient occlusion (Not supported)
-
-    // Transparency (Not supported)
-    pub alpha_mode: AlphaMode, // Opaque, alpha masking, or alpha blending
-    pub alpha_cutoff: f32, // Alpha threshold for Mask mode
-
-    // Back-face rendering
-    pub double_sided: bool, // Enables or disables back-face culling (Not supported)
-
+    pub base_color: Vector4<f32>,
+    pub base_color_texture: Option<TextureAssetId>,
+    pub metallic: f32,
+    pub roughness: f32,
+    pub metallic_roughness_texture: Option<TextureAssetId>,
+    pub normal_texture: Option<TextureAssetId>,
+    pub normal_scale: f32,
+    pub emissive_color: Vector3<f32>,
+    pub emissive_strength: f32,
+    pub emissive_texture: Option<TextureAssetId>,
+    pub occlusion_strength: f32,
+    pub occlusion_texture: Option<TextureAssetId>,
+    pub alpha_mode: AlphaMode,
+    pub alpha_cutoff: f32,
+    pub double_sided: bool,
     pub pipeline_key: PipelineKey,
 }
 
@@ -488,7 +485,7 @@ context.set_material(entity, Material {
     metallic,
     roughness,
     ..Material::default()
-});
+})?;
 ```
 
 ![Material Example](../../../assets/material.png)
@@ -508,11 +505,10 @@ let mesh = context
 context.spawn_primitive_from_mesh(
     mesh,
     Material {
-        color: vec3(1.0, 1.0, 1.0),
-        alpha: 1.0,
-        use_texture: false,
-        texture: context.default_texture(),
+        base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+        base_color_texture: None,
         pipeline_key: PipelineKey::Lit3D,
+        ..Material::default()
     },
     Transform {
         position: vec3(-3.0, 0.5, 0.5),

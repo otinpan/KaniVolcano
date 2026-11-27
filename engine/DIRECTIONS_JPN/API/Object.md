@@ -1,6 +1,12 @@
 # Object API
 ObjectAPIでは主に、画面に表示されるモデル、基本図形の生成を行います。これらの関数では、自動的に描画用のコンポーネント等が付与されます。
 
+## 資産の参照管理
+
+spawn時にmeshとMaterial内のtextureの参照数が増え、despawn時に減ります。同じtextureをMaterialの複数の欄で使っても、そのMaterialでは1参照として数えます。基本図形はGPU meshの作成待ちの間もtextureを保持します。
+
+glTFモデルはロード時に依存mesh・textureを保持し、spawnしたインスタンスも必要な資産を保持します。返されたroot Entityを`despawn()`すると子孫も削除され、参照が解放されます。資産の自動解放は各資産の`auto_release`に従います。
+
 ## モデルの生成
 ロードされたモデルを使用して、ワールドにモデルを生成します。  
 #### モデルのロード
@@ -30,7 +36,7 @@ unsafe{
     )?;
 
     app.load_model(
-        "viking_room_transparent_3d",
+        "viking_room_transparent3d",
         "assets/models/viking_room.obj",
         PipelineKey::Transparent3D,
         true,
@@ -44,14 +50,12 @@ unsafe{
 Meshには、頂点座標やインデックスなど、描画に必要な情報が含まれています。
 描画時には、GPUメモリ上に登録されたMeshに対して描画命令が実行されます。
 
-`auto_release`は、そのMeshを参照しているEntityがなくなったときに、自動的にMeshを解放するかどうかを指定する値です。
+`auto_release`は、そのMeshへの最後の参照がなくなったときに、自動的にMeshを解放するかどうかを指定する値です。
 
 #### モデルの作成
 ```rust
 fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
-    let viking_texture=context
-        .texture("viking_room")
-        .unwrap_or(context.default_texture());
+    let viking_texture=context.texture_asset_id("viking_room").ok();
 
     let viking_room_lit3d=context.spawn_model(
         "viking_room_lit3d",
@@ -61,11 +65,10 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
             scale: vec3(1.0,1.0,1.0),
         },
         Material { 
-            color: vec3(1.0,1.0,1.0),
-            alpha: 1.0,
-            use_texture: true, 
-            texture: viking_texture,
-            pipeline_key: PipelineKey::Lit3D // this Pipeline key must match selected model's PipelineKey
+            base_color: vec3(1.0,1.0,1.0).extend(1.0),
+            base_color_texture: viking_texture,
+            pipeline_key: PipelineKey::Lit3D,
+            ..Material::default()
         }
     )?;
 
@@ -77,11 +80,10 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
             scale: vec3(1.0,1.0,1.0),
         },
         Material { 
-            color: vec3(1.0,1.0,1.0),
-            alpha: 1.0,
-            use_texture: true, 
-            texture: viking_texture,
-            pipeline_key: PipelineKey::Mesh3D // this Pipeline key must match selected model's PipelineKey
+            base_color: vec3(1.0,1.0,1.0).extend(1.0),
+            base_color_texture: viking_texture,
+            pipeline_key: PipelineKey::Mesh3D,
+            ..Material::default()
         }
     )?;
 
@@ -93,11 +95,10 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
             scale: vec3(1.0,1.0,1.0),
         },
         Material { 
-            color: vec3(1.0,1.0,1.0),
-            alpha: 1.0,
-            use_texture: true, 
-            texture: viking_texture,
-            pipeline_key: PipelineKey::DebugLine3D // this Pipeline key must match selected model's PipelineKey
+            base_color: vec3(1.0,1.0,1.0).extend(1.0),
+            base_color_texture: viking_texture,
+            pipeline_key: PipelineKey::DebugLine3D,
+            ..Material::default()
         }
     )?;
 
@@ -109,11 +110,10 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
             scale: vec3(1.0,1.0,1.0),
         },
         Material { 
-            color: vec3(1.0,1.0,1.0),
-            alpha: 0.5,
-            use_texture: true, 
-            texture: viking_texture,
-            pipeline_key: PipelineKey::Transparent3D // this Pipeline key must match selected model's PipelineKey
+            base_color: vec3(1.0,1.0,1.0).extend(0.5),
+            base_color_texture: viking_texture,
+            pipeline_key: PipelineKey::Transparent3D,
+            ..Material::default()
         }
     )?;
     Ok(())
@@ -140,7 +140,7 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
             scale: vec3(2.0,2.0,2.0)
         },
         None,
-    );
+    )?;
 
     let refrigerator = context.spawn_gltf_model(
         "refrigerator",
@@ -150,7 +150,7 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
             scale: vec3(1.0,1.0,1.0),
         },
         None,
-    );
+    )?;
     
     let car=context.spawn_gltf_model(
         "car",
@@ -160,7 +160,7 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
             ..Default::default()
         },
         None,
-    );
+    )?;
 
     let helmet=context.spawn_gltf_model(
         "helmet",
@@ -170,7 +170,7 @@ fn create_models(&mut self, context: &mut SceneContext<'_>) -> Result<()> {
             ..Default::default()
         },
         None,
-    );
+    )?;
     Ok(())
 }
 ```
@@ -534,7 +534,7 @@ context.add_component(
         scale: vec3(1.0,2.0,0.0),
         ..Default::default()
     },
-);
+)?;
 context.add_component(
     hello_world,
     Text{
@@ -544,8 +544,9 @@ context.add_component(
         line_height: 100.0,
         color: vec3(1.0,1.0,0.0),
         alpha: 0.5,
+        text_pipeline: TextPipeline::Ui2D,
     }
-);
+)?;
 ```
 
 ### 3D
@@ -586,46 +587,39 @@ let hello_kani_volcanoe=context.spawn_text_3d(
 3Dに関しては、カメラとの位置関係から描画順序が決まります。対して、Ui2Dの図形やテキストは描画順序は指定する必要があります。描画順序を指定しないと、生成された順番に描画されてしまい、意図しない描画順序で表示されてしまいます。
 
 ```rust
-context.set_draw_order(entity: EntityId, order: i32)
+context.set_draw_order(entity, order)?;
 ```
 
 ```rust
-context.set_draw_order(background, -100);
-context.set_draw_order(button, 10);
-context.set_draw_order(popup, 100);
+context.set_draw_order(background, -100)?;
+context.set_draw_order(button, 10)?;
+context.set_draw_order(popup, 100)?;
 ```
 
 ## Materialの指定
+
+Materialのテクスチャ欄には`Option<TextureAssetId>`を指定します。`None`はそのテクスチャを使用しない指定です。変更は`set_material()`を使います。新しいtextureをretainしてから古い参照をreleaseするため、共有textureも安全に引き継げます。無効な資産やmeshと互換性のないpipelineはエラーになり、元のMaterialを維持します。
+
+`MeshRenderer`などへの直接の可変アクセスは制限されています。glTFではrootではなく、`MeshRenderer`を持つprimitive Entityに対して変更します。
+
 Materialはオブジェクト描画時の質感を決定します。
 ```rust
 pub struct Material {
-    pub base_color: Vector4<f32>, // 基本色 (対応)
-    pub base_color_texture: Option<TextureHandle>, // 基本色の画像 (対応)
-    
-    // 質感
-    pub metallic: f32, // 金属感 (対応)
-    pub roughness: f32, // 表面の粗さ (対応)
-    pub metallic_roughness_texture: Option<TextureHandle>, // 場所ごとの金属感や粗さ G:粗さ、B:金属感 (未対応)
-
-    // 凹凸 (未対応)
-    pub normal_texture: Option<TextureHandle>, // 表面の凹凸
-    pub normal_scale: f32, // 法線マップの強さ
-
-    // 自発光
-    pub emissive_color: Vector3<f32>, // 発光色 (対応)
-    pub emissive_strength: f32, // 倍率 (対応)
-    pub emissive_texture: Option<TextureHandle>, // 発光色の画像 (未対応)
-
-    // 遮蔽によって間接光を弱める効果の強さ
-    pub occlusion_strength: f32, // (未対応)
-
-    // 透明感 (未対応)
-    pub alpha_mode: AlphaMode, // 不透明・切り抜き・半透明から選択
-    pub alpha_cutoff: f32, // Maskの切り抜き境界値 
-
-    // 裏面描画on/off
-    pub double_sided: bool, // (未対応)
-
+    pub base_color: Vector4<f32>,
+    pub base_color_texture: Option<TextureAssetId>,
+    pub metallic: f32,
+    pub roughness: f32,
+    pub metallic_roughness_texture: Option<TextureAssetId>,
+    pub normal_texture: Option<TextureAssetId>,
+    pub normal_scale: f32,
+    pub emissive_color: Vector3<f32>,
+    pub emissive_strength: f32,
+    pub emissive_texture: Option<TextureAssetId>,
+    pub occlusion_strength: f32,
+    pub occlusion_texture: Option<TextureAssetId>,
+    pub alpha_mode: AlphaMode,
+    pub alpha_cutoff: f32,
+    pub double_sided: bool,
     pub pipeline_key: PipelineKey,
 }
 
@@ -637,13 +631,13 @@ pub enum AlphaMode{
 ```
 
 ```rust
-context.set_materila(entity, Material{
+context.set_material(entity, Material{
     base_color,
-    base_texture,
+    base_color_texture,
     metallic,
     roughness,
     ..Material::default()
-})
+})?;
 ```
 
 ![](../../../assets/material.png)
@@ -659,16 +653,14 @@ if self.cube_mesh_ready && !self.double_created {
         PrimitiveType::Cube,
         PipelineKey::Lit3D.required_vertex_layout(),
     ) {
-        let texture=context.texture("viking_room")
-        .unwrap_or(context.default_texture());
+        let texture=context.texture_asset_id("viking_room").ok();
         context.spawn_primitive_from_mesh(
             mesh,
             Material {
-                color: vec3(1.0, 1.0, 1.0),
-                alpha: 1.0,
-                use_texture: true,
-                texture: texture,
+                base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+                base_color_texture: texture,
                 pipeline_key: PipelineKey::Lit3D,
+                ..Material::default()
             },
             Transform {
                 position: vec3(-3.0, 0.5, 0.5),
@@ -705,11 +697,10 @@ fn create_doubles(&mut self, context: &mut SceneContext<'_>) -> Result<()>{
     let cube = context.spawn_primitive_from_mesh(
         mesh,
         Material {
-            color: vec3(1.0, 1.0, 1.0),
-            alpha: 1.0,
-            use_texture: false,
-            texture: context.default_texture(),
+            base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+            base_color_texture: None,
             pipeline_key: PipelineKey::Lit3D,
+            ..Material::default()
         },
         Transform {
             position: vec3(-3.0, 0.5, 0.5),
@@ -751,16 +742,14 @@ impl Scene for TutorialScene{
                 PrimitiveType::Cube,
                 PipelineKey::Lit3D.required_vertex_layout(),
             ) {
-                let texture=context.texture("viking_room")
-                .unwrap_or(context.default_texture());
+                let texture=context.texture_asset_id("viking_room").ok();
                 context.spawn_primitive_from_mesh(
                     mesh,
                     Material {
-                        color: vec3(1.0, 1.0, 1.0),
-                        alpha: 1.0,
-                        use_texture: true,
-                        texture: texture,
+                        base_color: vec3(1.0, 1.0, 1.0).extend(1.0),
+                        base_color_texture: texture,
                         pipeline_key: PipelineKey::Lit3D,
+                        ..Material::default()
                     },
                     Transform {
                         position: vec3(-3.0, 0.5, 0.5),
@@ -794,7 +783,7 @@ impl TutorialScene{
                 position: vec3(5.0,0.0,0.0),
                 ..Default::default()
             }
-        );
+        )?;
         context.add_component(
             camera,
             Camera{
@@ -805,7 +794,7 @@ impl TutorialScene{
                 yaw: std::f32::consts::PI, // horizontal way to move
                 pitch: 0.0, // vertical way to move
             },
-        );
+        )?;
         Ok(())
     }
 

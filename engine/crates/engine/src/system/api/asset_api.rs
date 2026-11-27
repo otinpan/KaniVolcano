@@ -7,9 +7,45 @@ use crate::{
 use anyhow::{Result, anyhow};
 use renderer_vulkan::{SkyboxTextureHandle, VertexLayout};
 
+
 pub trait AssetApi {
     fn resources(&self) -> &Resources;
     fn resources_mut(&mut self) -> &mut Resources;
+
+    /// Unregisters an unused texture regardless of auto_release and queues GPU destruction.
+    /// Missing or referenced assets return an error without changing ownership.
+    fn unload_texture(&mut self, id: TextureAssetId) -> Result<()>
+    where Self: RenderCommandApi,
+    {
+        let handle = self.resources_mut().unload_texture(id)?;
+        self.render_commands_mut().destroy_texture(handle);
+        Ok(())
+    }
+
+    /// Unregisters an unused mesh regardless of auto_release and queues GPU destruction.
+    fn unload_mesh(&mut self, id: MeshAssetId) -> Result<()>
+    where Self: RenderCommandApi,
+    {
+        let handle = self.resources_mut().unload_mesh(id)?;
+        self.render_commands_mut().destroy_mesh(handle);
+        Ok(())
+    }
+
+    /// Unregisters a model with no instances, regardless of its auto_release flag.
+    /// Dependencies are released according to their own reference counts and auto_release flags.
+    fn unload_gltf_model(&mut self, id: GltfModelAssetId) -> Result<()>
+    where Self: RenderCommandApi,
+    {
+        let released = self.resources_mut().unload_gltf_model(id)?;
+        let commands = self.render_commands_mut();
+        for mesh in released.meshes {
+            commands.destroy_mesh(mesh);
+        }
+        for texture in released.textures {
+            commands.destroy_texture(texture);
+        }
+        Ok(())
+    }
 
     fn model_asset_id(&self, model_name: &str) -> Result<MeshAssetId> {
         let asset_id = self
@@ -121,5 +157,93 @@ pub trait AssetApi {
         self.resources()
             .audio_bus_id(name)
             .ok_or_else(|| anyhow!("audio bus not found: {name}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{RenderCommand, RenderCommandQueue};
+    use renderer_vulkan::{MeshHandle, TextureHandle};
+
+    #[derive(Default)]
+    struct Context {
+        resources: Resources,
+        commands: RenderCommandQueue,
+    }
+    impl AssetApi for Context {
+        fn resources(&self) -> &Resources { &self.resources }
+        fn resources_mut(&mut self) -> &mut Resources { &mut self.resources }
+    }
+    impl RenderCommandApi for Context {
+        fn render_commands_mut(&mut self) -> &mut RenderCommandQueue { &mut self.commands }
+    }
+
+    #[test]
+    fn unload_requires_no_references_and_queues_destruction_once() {
+        let mut context = Context::default();
+        let mesh_handle = MeshHandle::new(3, VertexLayout::Lit3D);
+        let mesh = context.resources.register_model("mesh", mesh_handle, false);
+        let texture = context.resources.register_texture("texture", TextureHandle(1), false).unwrap();
+        context.resources.retain_mesh(mesh);
+        context.resources.retain_texture(texture);
+        assert!(context.unload_mesh(mesh).is_err());
+        assert!(context.unload_texture(texture).is_err());
+        assert_eq!(context.model_asset_id("mesh").unwrap(), mesh);
+        assert_eq!(context.texture_asset_id("texture").unwrap(), texture);
+        assert_eq!(context.commands.drain().count(), 0);
+        assert!(context.resources.release_mesh(mesh).is_none());
+        assert!(context.resources.release_texture(texture).is_none());
+        context.unload_mesh(mesh).unwrap();
+        context.unload_texture(texture).unwrap();
+        assert!(context.resources.get_mesh_handle(mesh).is_none());
+        assert!(context.resources.get_texture_handle(texture).is_none());
+        assert!(context.model_asset_id("mesh").is_err());
+        assert!(context.texture_asset_id("texture").is_err());
+        assert!(context.unload_mesh(mesh).is_err());
+        assert!(context.unload_texture(texture).is_err());
+        let commands: Vec<_> = context.commands.drain().collect();
+        assert!(matches!(commands.as_slice(),
+            [RenderCommand::DestroyMesh { mesh }, RenderCommand::DestroyTexture { texture }]
+                if *mesh == mesh_handle && *texture == TextureHandle(1)));
+    }
+
+    #[test]
+    fn unloading_model_respects_shared_and_persistent_dependencies() {
+        for auto_release in [false, true] {
+            for shared in [false, true] {
+                let mut context = Context::default();
+                let mesh = context.resources.register_model("mesh",
+                    MeshHandle::new(3, VertexLayout::Lit3D), auto_release);
+                let texture = context.resources.register_texture("texture", TextureHandle(1), auto_release).unwrap();
+                let model = context.resources.insert_gltf_model_asset(
+                    kani_volcano_animation::GltfModel::default(), vec![vec![mesh, mesh]], vec![],
+                    vec![crate::resources::GltfTextureAsset { srgb: Some(texture), linear: Some(texture) }],
+                    false,
+                ).unwrap();
+                context.resources.retain_gltf_model(model).unwrap();
+                assert!(context.unload_gltf_model(model).is_err());
+                assert!(context.unload_mesh(mesh).is_err());
+                assert!(context.unload_texture(texture).is_err());
+                assert_eq!(context.commands.drain().count(), 0);
+                let released = context.resources.release_gltf_model(model);
+                assert!(released.meshes.is_empty() && released.textures.is_empty());
+                if shared {
+                    context.resources.retain_mesh(mesh);
+                    context.resources.retain_texture(texture);
+                }
+                context.unload_gltf_model(model).unwrap();
+                assert!(context.resources.gltf_model_asset(model).is_none());
+                assert!(context.unload_gltf_model(model).is_err());
+                let destroyed = auto_release && !shared;
+                assert_eq!(context.resources.get_mesh_handle(mesh).is_none(), destroyed);
+                assert_eq!(context.resources.get_texture_handle(texture).is_none(), destroyed);
+                assert_eq!(context.commands.drain().count(), if destroyed { 2 } else { 0 });
+                if !destroyed {
+                    assert_eq!(context.resources.mesh_assets().next().unwrap().1.ref_count, usize::from(shared));
+                    assert_eq!(context.resources.texture_assets().next().unwrap().1.ref_count, usize::from(shared));
+                }
+            }
+        }
     }
 }

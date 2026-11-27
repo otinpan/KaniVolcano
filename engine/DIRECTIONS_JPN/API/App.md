@@ -22,6 +22,10 @@ fn main()  -> Result<()>{
 
 ## Assets
 モデルやテクスチャをAppからロードすることができます。  
+モデルやテクスチャはロード時にGPUへ転送されます。EntityやglTFモデル資産が保持する参照をカウントし、最後の参照が外れたとき、`auto_release=true`の資産を自動解放します。単にロードしてIDを取得しただけではEntityからの参照は増えません。
+
+`auto_release=false`なら未使用になっても保持します。参照数が0なら、[Asset API](Asset.md)の`unload_mesh()`・`unload_texture()`・`unload_gltf_model()`で明示解放できます。解放後の再使用には再ロードが必要です。glTFモデル解放時の依存資産も、それぞれの参照数と`auto_release`に従います。
+
 ### `obj`ファイルのロード
 ```rust
 unsafe{
@@ -51,7 +55,7 @@ app.load_gltf_model(
 ```
 1. モデルに付ける名前
 2. ファイルのパス
-4. モデルを自動的に解放するか
+3. モデルを自動的に解放するか
 
 を指定します。Pipelineは自動的に決定されます
 
@@ -62,19 +66,22 @@ unsafe{
     app.load_texture(
         "ghost",
         "assets/textures/ghost.png",
+        true,
     )?;
 
     app.load_texture_with_color_space(
         "face", 
         "assets/textures/texture.png", 
-        TextureColorSpace::Linear
+        TextureColorSpace::Linear,
+        true,
     )?;
 }
 ```
 1. テクスチャに付ける名前
 2. テクスチャのパス
+3. 画像を自動的に解放するか
 
-`load_texture_with_color_space()` では画像の色空間を指定することが出来ます。`load_texture()`では`TextureColorSpace::Srgb`で、サンプリング時に自動的にLinearに補完します。
+`load_texture_with_color_space()`は第3引数に色空間、第4引数に`auto_release`を指定します。`load_texture()`では`TextureColorSpace::Srgb`で、サンプリング時に自動的にLinearに変換します。
 
 ### Skybox
 Skyboxとは背景に表示される立方体のことです。ワールドに立方体を置き、その内側に指定したテクスチャを張ることが出来ます。  

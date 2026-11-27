@@ -6,7 +6,7 @@ It is available from `SceneContext`, `UpdateContext`, and `CommandContext`.
 
 ```rust
 let entity = context.spawn();
-context.add_component(entity, Transform::default());
+context.add_component(entity, Transform::default())?;
 ```
 
 An entity is only an ID. It gains behavior and state through components.
@@ -25,7 +25,7 @@ When called from `SceneContext`, `spawn()` automatically adds `SceneOwned`.
 let removed: bool = context.despawn(entity);
 ```
 
-Despawns an entity. This also removes its components. If the entity owns an auto-release mesh, the mesh can be released as well.
+Despawns an entity and its descendants linked by `ParentComponent`, removing their components and releasing mesh, texture, and glTF model references. Assets with `auto_release=true` are released when their last reference is removed; GPU destruction is queued.
 
 ```rust
 context.despawn_last();
@@ -44,14 +44,24 @@ let count: usize = context.entity_count();
 ## Components
 
 ```rust
-context.add_component(entity, Transform::default());
+context.add_component(entity, Transform::default())?;
 let transform = context.get_component::<Transform>(entity);
 let transform = context.get_component_mut::<Transform>(entity);
 let has = context.has_component::<Transform>(entity);
 let removed = context.remove_component::<Transform>(entity);
 ```
 
-`add_component()` returns `false` if the entity does not exist. `remove_component()` returns `Some(component)` if the component existed.
+`add_component()` returns `Result<()>` and replaces an existing component of the same type. Invalid entities or assets return an error without changing the old component. For asset-owning components, it retains new assets before releasing the old references; manual retain/release is unnecessary.
+
+`remove_component()` returns `true` if removed, or `false` if absent. It releases the component’s asset references and does not return the removed value.
+
+### Mutable Access Restrictions
+
+`get_component_mut()` and `get_component_pool_mut()` return `None` for `MeshRenderer`, `PendingPrimitiveMesh`, and `GltfModelRoot`. Queries requesting mutable access to these types return an empty iterator.
+
+Read-only access remains available, including `query2_mut::<Transform, MeshRenderer>()`. Use `set_material()` to change materials or `add_component()` to replace a whole component.
+
+Direct low-level access to `World` or `Resources` bypasses this reference management and these restrictions.
 
 ## Queries
 
@@ -70,8 +80,9 @@ for (_, transform) in context.query1_mut::<Transform>() {
 ```
 
 ```rust
+let delta_seconds = context.delta_seconds();
 for (_, transform, rotator) in context.query2_mut::<Transform, Rotator>() {
-    transform.rotate(rotator.speed * context.delta_seconds());
+    transform.rotate(rotator.speed * delta_seconds);
 }
 ```
 
@@ -125,12 +136,7 @@ You can get `MeshAssetId` from Entity. If specified Entity have mesh,
 then return `Some(MeshAssetId)`, else return `None`.
 
 ```rust
-let entity_mesh=context.spawn();
-let entity_no_mesh=context.spawn();
-context.add_component(entity_mesh, mesh_renderer(Some(MeshAssetId(3))));
-
-let mesh_asset_id=context.mesh_asset_id(entity_mesh); // Some(MeshAssetId(3))
-let no_mesh_asset_id=context.mesh_asset_id(entity_no_mesh); // None
+let mesh_asset_id: Option<MeshAssetId> = context.mesh_asset_id(entity);
 ```
 ## Context Difference
 
@@ -141,5 +147,5 @@ let no_mesh_asset_id=context.mesh_asset_id(entity_no_mesh); // None
 If a command-created entity should be removed when the scene exits, add `SceneOwned` manually.
 
 ```rust
-context.add_component(entity, SceneOwned { scene_id });
+context.add_component(entity, SceneOwned { scene_id })?;
 ```

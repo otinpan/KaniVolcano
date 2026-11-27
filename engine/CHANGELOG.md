@@ -168,3 +168,11 @@ Add `load_gltf_mode` loading glTF or glb and render them.
 
 ## v0.7.1
 Fixed job system crashes in optimized builds caused by reusing a previous worker’s TLS address after fiber migration. Prevented inlining of executor TLS access to ensure it is resolved on the current worker.
+
+## v0.7.2
+- Added reference counting and automatic release for texture assets.
+- Unified asset reference management across spawning, despawning, material changes, and component replacement/removal.
+- Added `unload_texture()`, `unload_mesh()`, and `unload_gltf_model()` for explicitly unloading unused assets.
+- Changed `add_component()` to return `Result<()>` and `remove_component()` to return `bool`.
+- Restricted mutable access to asset-owning components; use `set_material()` or `add_component()` instead.
+- Updated Japanese and English API documentation.

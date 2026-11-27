@@ -708,6 +708,36 @@ impl Resources {
         ReleasedGltfModelAssets::default()
     }
 
+    pub(crate) fn unload_texture(&mut self, id: TextureAssetId) -> Result<TextureHandle> {
+        let asset = self.texture_assets.get(id.0).and_then(Option::as_ref)
+            .ok_or_else(|| anyhow!("Texture asset not found: {id:?}"))?;
+        anyhow::ensure!(asset.ref_count == 0, "Texture asset is in use: {id:?}");
+        anyhow::ensure!(asset.handle != TextureHandle(0), "Cannot unload the default texture");
+        let handle = asset.handle;
+        self.texture_assets[id.0] = None;
+        self.textures.retain(|_, value| *value != id);
+        Ok(handle)
+    }
+
+    pub(crate) fn unload_mesh(&mut self, id: MeshAssetId) -> Result<MeshHandle> {
+        let asset = self.mesh_assets.get(id.0).and_then(Option::as_ref)
+            .ok_or_else(|| anyhow!("Mesh asset not found: {id:?}"))?;
+        anyhow::ensure!(asset.ref_count == 0, "Mesh asset is in use: {id:?}");
+        anyhow::ensure!(self.skybox_mesh != Some(asset.handle), "Cannot unload the active skybox mesh");
+        let handle = asset.handle;
+        self.mesh_assets[id.0] = None;
+        self.models.retain(|_, value| *value != id);
+        self.primitive_meshes.retain(|mesh| mesh.asset_id != id);
+        Ok(handle)
+    }
+
+    pub(crate) fn unload_gltf_model(&mut self, id: GltfModelAssetId) -> Result<ReleasedGltfModelAssets> {
+        let asset = self.gltf_model_asset(id)
+            .ok_or_else(|| anyhow!("glTF model asset not found: {id:?}"))?;
+        anyhow::ensure!(asset.ref_count == 0, "glTF model asset is in use: {id:?}");
+        Ok(self.remove_gltf_model_asset(id))
+    }
+
     pub fn release_mesh(&mut self, id: MeshAssetId) -> Option<MeshHandle> {
         let asset = self.mesh_assets.get_mut(id.0)?.as_mut()?;
 

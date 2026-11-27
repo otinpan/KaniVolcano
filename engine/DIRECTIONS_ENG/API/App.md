@@ -25,6 +25,12 @@ fn main() -> Result<()> {
 
 Use `App` to load assets, create the skybox mesh, register scenes, and select the current scene.
 
+## Asset Lifetime
+
+Models and textures are uploaded to the GPU when loaded. References are held by entities and glTF model assets. With `auto_release=true`, an asset is released when its last reference is removed. Loading an asset or looking up its ID does not add an entity reference.
+
+With `auto_release=false`, unused assets remain loaded. When their reference count is zero, use `unload_mesh()`, `unload_texture()`, or `unload_gltf_model()` from [Asset API](Asset.md). Reload released assets before using them again. Dependencies of an unloaded glTF model follow their own reference counts and `auto_release` flags.
+
 ## Loading Models
 
 ```rust
@@ -71,11 +77,12 @@ The pipeline is selected automatically. Use the registered name with `spawn_gltf
 
 ```rust
 unsafe {
-    app.load_texture("ghost", "assets/textures/ghost.png")?;
+    app.load_texture("ghost", "assets/textures/ghost.png", true)?;
     app.load_texture_with_color_space(
         "face",
         "assets/textures/texture.png",
         TextureColorSpace::Linear,
+        true,
     )?;
 }
 ```
@@ -84,8 +91,9 @@ Arguments:
 
 1. Texture name
 2. Texture file path
+3. `auto_release`
 
-`load_texture_with_color_space()` takes a third argument, `TextureColorSpace`, to select the image's color space. `load_texture()` uses `TextureColorSpace::Srgb`, which automatically converts RGB values from sRGB to linear when sampled. `TextureColorSpace::Linear` uses the stored values without this conversion.
+`load_texture_with_color_space()` takes `TextureColorSpace` as its third argument and `auto_release` as its fourth. `load_texture()` uses `TextureColorSpace::Srgb`, which automatically converts RGB values from sRGB to linear when sampled. `TextureColorSpace::Linear` uses the stored values without this conversion.
 
 See [TextureColorSpace](../DataType.md#texturecolorspace) for common uses.
 

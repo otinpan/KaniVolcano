@@ -4,18 +4,18 @@ Entity APIは、ECS上のEntityを作成・削除し、Component、Name、Tagを
 `SceneContext`、`UpdateContext`、`CommandContext`から呼び出すことができます。
 
 ```rust
-use engine::{EntityApi, Rotator};
-use kani_volcano_engine::Transform;
+use kani_volcano_engine::{EntityApi, Rotator};
+use kani_volcano_math::Transform;
 
 let entity = context.spawn();
 
-context.add_component(entity, Transform::default());
+context.add_component(entity, Transform::default())?;
 context.add_component(
     entity,
     Rotator {
         speed: cgmath::vec3(0.0, 1.0, 0.0),
     },
-);
+)?;
 ```
 
 Entityはゲーム内オブジェクトを表すIDです。
@@ -40,11 +40,11 @@ let entity: EntityId = context.spawn();
 let removed: bool = context.despawn(entity);
 ```
 
-指定したEntityを削除します。
+指定したEntityと、`ParentComponent`でつながる子孫を削除します。
 Entityが存在する場合は`true`、存在しない場合は`false`を返します。
 
 削除時には、そのEntityが持っていたComponentもすべて削除されます。
-また、`MeshRenderer`が`MeshAssetId`を持っている場合は、対応するMesh Resourceを解放し、Renderer側のMesh破棄コマンドも積みます。
+mesh・texture・glTFモデルの参照数も減らします。最後の参照がなくなり、`auto_release=true`の資産は解放され、GPU破棄が予約されます。
 
 ### 最後のEntity削除
 
@@ -92,22 +92,21 @@ let count: usize = context.entity_count();
 ### Component追加
 
 ```rust
-let ok: bool = context.add_component(entity, Transform::default());
+context.add_component(entity, Transform::default())?;
 ```
 
-EntityにComponentを追加します。
-Entityが存在する場合は`true`、存在しない場合は`false`を返します。
+EntityにComponentを追加・上書きし、`Result<()>`を返します。Entityや参照先の資産が無効な場合はエラーになり、元のComponentは維持されます。
 
-同じ型のComponentを同じEntityに追加した場合は、ComponentPool内の値が差し替えられます。
+資産を持つComponentでは、新しい資産の参照数を増やしてから、上書きされるComponentの参照数を減らします。利用者によるretain/releaseは不要です。
 
 ### Component削除
 
 ```rust
-let removed: Option<Transform> = context.remove_component::<Transform>(entity);
+let removed: bool = context.remove_component::<Transform>(entity);
 ```
 
 Entityから指定した型のComponentを削除します。
-Componentが存在する場合は`Some(Component)`、存在しない場合は`None`を返します。
+削除できた場合は`true`、存在しない場合は`false`を返します。削除したComponentの資産参照数を減らします。Component自体は返しません。
 
 ### Component取得
 
@@ -144,6 +143,14 @@ let pool_mut = context.get_component_pool_mut::<Transform>();
 
 指定した型のComponentPoolを取得します。
 通常は`query1()`や`query2()`を使う方が扱いやすいですが、Pool全体を直接見たい場合に使えます。
+
+### 可変アクセスの制限
+
+`MeshRenderer`・`PendingPrimitiveMesh`・`GltfModelRoot`は資産の参照管理が必要なため、`get_component_mut()`と`get_component_pool_mut()`は`None`を返します。これらを可変取得するqueryは空のiteratorを返します。
+
+読み取りは可能です。`query2_mut::<Transform, MeshRenderer>()`のように、管理対象を読み取り側に指定することもできます。Material変更は`set_material()`、Component全体の交換は`add_component()`を使用してください。
+
+`World`や`Resources`を直接操作する低レベルAPIは、この参照管理と制限を迂回します。
 
 ## Query
 
@@ -183,8 +190,9 @@ for (entity, transform, camera) in context.query2::<Transform, Camera>() {
 ### 片方を変更し、もう片方を読む
 
 ```rust
+let delta_seconds = context.delta_seconds();
 for (_, transform, rotator) in context.query2_mut::<Transform, Rotator>() {
-    transform.rotate(rotator.speed * context.delta_seconds());
+    transform.rotate(rotator.speed * delta_seconds);
 }
 ```
 
@@ -355,7 +363,7 @@ impl Command for CreateRectangleCommand{
             SceneOwned{
                 scene_id: self.scene_id,
             }
-        );
+        )?;
         Ok(())
     }
 }
@@ -367,8 +375,9 @@ impl Command for CreateRectangleCommand{
 ```rust
 impl UpdateSystem for MoveSystem {
     fn update(&mut self, context: &mut UpdateContext<'_>) -> Result<()> {
+        let delta_seconds = context.delta_seconds();
         for (_, transform, velocity) in context.query2_mut::<Transform, Velocity>() {
-            transform.position += velocity.value * context.delta_seconds();
+            transform.position += velocity.value * delta_seconds;
         }
 
         Ok(())
@@ -399,8 +408,8 @@ impl Command for DespawnLastCommand {
 ```rust
 let entity = context.spawn();
 
-context.add_component(entity, Transform::default());
-context.add_component(entity, Visibility::default());
+context.add_component(entity, Transform::default())?;
+context.add_component(entity, Visibility::default())?;
 context.set_name(entity, "Player");
 context.set_tags(entity, ["Object", "Player"]);
 ```
@@ -408,8 +417,9 @@ context.set_tags(entity, ["Object", "Player"]);
 ### Systemから対象Entityを更新する
 
 ```rust
+let delta_seconds = context.delta_seconds();
 for (_, transform, rotator) in context.query2_mut::<Transform, Rotator>() {
-    transform.rotate(rotator.speed * context.delta_seconds());
+    transform.rotate(rotator.speed * delta_seconds);
 }
 ```
 
@@ -431,12 +441,7 @@ for enemy in context.get_entities_by_tag("Enemy") {
 Entityを指定して、MeshAssetIdを取得することができます。もし、そのEnitityがメッシュを持っていなかったら`None`を返し、メッシュを持っていたら`Some(MeshAssetId)`を返します。
 
 ```rust
-let entity_mesh=context.spawn();
-let entity_no_mesh=context.spawn();
-context.add_component(entity_mesh, mesh_renderer(Some(MeshAssetId(3))));
-
-let mesh_asset_id=context.mesh_asset_id(entity_mesh); // Some(MeshAssetId(3))
-let no_mesh_asset_id=context.mesh_asset_id(entity_no_mesh); // None
+let mesh_asset_id: Option<MeshAssetId> = context.mesh_asset_id(entity);
 ```
 
 ## 注意点
@@ -445,7 +450,7 @@ let no_mesh_asset_id=context.mesh_asset_id(entity_no_mesh); // None
 Entityの実体や状態はComponentにあります。
 
 `despawn()`すると、そのEntityが持つComponentも削除されます。
-描画用Meshを持つEntityの場合は、関連するMesh Resourceの解放も行われます。
+資産の解放は参照数と`auto_release`に従います。
 
 Nameは重複できません。
 同じ名前を登録しようとすると`set_name()`は`false`を返します。
