@@ -46,7 +46,10 @@ pub trait EntityApi {
             ];
             for material in materials.into_iter().flatten() {
                 let handles = self.resources_mut().release_material_textures(&material);
-                self.render_commands_mut().defer_texture_destruction(handles);
+
+                for texture in handles{
+                    self.render_commands_mut().destroy_texture(texture);
+                }
             }
             let mesh_id = self.world().get_component::<MeshRenderer>(current)
                 .and_then(|renderer| renderer.asset_id);

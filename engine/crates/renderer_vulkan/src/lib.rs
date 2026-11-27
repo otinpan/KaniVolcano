@@ -804,9 +804,44 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    pub unsafe fn destroy_texture(&mut self, texture_handle: TextureHandle) -> Result<()>{
+    /// Destroys a texture and all material descriptors referencing it.
+    /// The caller must remove its references from render items before the next render.
+    pub unsafe fn destroy_texture(&mut self, texture_handle: TextureHandle) -> Result<()> {
+        let index = texture_handle.0;
+        anyhow::ensure!(index != 0, "Cannot destroy the default white texture");
+        let slot = self.data.textures.get(index)
+            .ok_or_else(|| anyhow!("Texture index out of range: {index}"))?;
+        if slot.is_none() {
+            return Ok(());
+        }
 
-    } 
+        // Do not change ownership until all previously submitted GPU work has finished.
+        self.device.device_wait_idle()?;
+
+        if let Some(descriptor) = self.data.material_descriptor_sets.get(index).and_then(Option::as_ref) {
+            let pool = &mut self.data.material_descirptor_pools[descriptor.pool_index];
+            anyhow::ensure!(pool.live_sets > 0, "Invalid material descriptor pool usage");
+            self.device.free_descriptor_sets(pool.handle, &[descriptor.set])?;
+            pool.live_sets -= 1;
+            self.data.material_descriptor_sets[index] = None;
+        }
+
+        let keys: Vec<_> = self.data.pbr_material_descriptor_sets.keys()
+            .filter(|key| key.contains(&texture_handle)).copied().collect();
+        for key in keys {
+            let descriptor = &self.data.pbr_material_descriptor_sets[&key];
+            let pool = self.data.pbr_material_descriptor_pools[descriptor.pool_index];
+            self.device.free_descriptor_sets(pool, &[descriptor.set])?;
+            // Remove only successfully freed sets, so cleanup can be retried on error.
+            self.data.pbr_material_descriptor_sets.remove(&key);
+        }
+
+        let texture = self.data.textures[index].take().expect("validated texture");
+        self.device.destroy_image_view(texture.image_view, None);
+        self.device.destroy_image(texture.image, None);
+        self.device.free_memory(texture.image_memory, None);
+        Ok(())
+    }
 
     pub fn set_render_items(&mut self, render_items: Vec<RenderItem>) {
         self.data.render_objects = render_items;
