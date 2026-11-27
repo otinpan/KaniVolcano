@@ -19,7 +19,8 @@ It is designed around ECS, scenes, and context-based APIs so users can create en
 - Font System
 - Parallel Job System/ Multi Thread
 - Debug Pause/Resume
-- Material (can not use material textures)
+- Material
+- Loading glTF models and rendering (can not animation)
 
 ![](assets/tutorial_font3d.png)
 ![](assets/job_system_profiler.png)
